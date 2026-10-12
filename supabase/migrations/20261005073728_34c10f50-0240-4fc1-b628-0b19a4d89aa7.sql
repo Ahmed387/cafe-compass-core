@@ -1,0 +1,1 @@
+revoke execute on function public.delete_partner_safe(uuid) from anon, public;

@@ -1,0 +1,2 @@
+REVOKE EXECUTE ON FUNCTION public.set_partner_managing(uuid,boolean,numeric,date,text), public.payout_partner_combined(uuid,uuid,uuid,text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.set_partner_managing(uuid,boolean,numeric,date,text), public.payout_partner_combined(uuid,uuid,uuid,text) TO authenticated;

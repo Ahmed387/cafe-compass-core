@@ -1,0 +1,2 @@
+UPDATE public.companies SET name = '20s Coffee', legal_name = COALESCE(NULLIF(legal_name,'90s Coffee'), legal_name) WHERE name = '90s Coffee';
+UPDATE public.companies SET legal_name = '20s Coffee' WHERE legal_name = '90s Coffee';

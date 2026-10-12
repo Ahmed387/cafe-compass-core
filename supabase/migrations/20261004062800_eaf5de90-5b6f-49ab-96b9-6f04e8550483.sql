@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.can_absorb_shortage() FROM PUBLIC, anon;

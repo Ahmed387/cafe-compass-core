@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.period_manager_salaries(uuid) FROM PUBLIC, anon;

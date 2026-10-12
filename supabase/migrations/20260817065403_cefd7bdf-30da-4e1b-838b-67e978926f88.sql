@@ -1,0 +1,12 @@
+REVOKE EXECUTE ON FUNCTION public.work_day_close_at(uuid, timestamptz) FROM anon, public;
+REVOKE EXECUTE ON FUNCTION public.shift_deadline_info() FROM anon, public;
+REVOKE EXECUTE ON FUNCTION public.auto_close_due_shifts() FROM anon, public, authenticated;
+REVOKE EXECUTE ON FUNCTION public.role_usage(uuid) FROM anon, public;
+REVOKE EXECUTE ON FUNCTION public.delete_role(uuid, uuid) FROM anon, public;
+REVOKE EXECUTE ON FUNCTION public.set_user_roles(uuid, uuid[]) FROM anon, public;
+GRANT EXECUTE ON FUNCTION public.work_day_close_at(uuid, timestamptz) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.shift_deadline_info() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.role_usage(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.delete_role(uuid, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.set_user_roles(uuid, uuid[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.auto_close_due_shifts() TO service_role;

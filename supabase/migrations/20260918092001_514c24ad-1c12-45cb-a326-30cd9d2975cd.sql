@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.create_pos_order(uuid, jsonb, jsonb, order_type, numeric, text, text, text, text, uuid, text);

@@ -1,0 +1,14 @@
+REVOKE EXECUTE ON FUNCTION public.cash_balance(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.default_cash_account(uuid, text) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.post_cash_txn(uuid, uuid, text, numeric, text, text, date, text, uuid, text, uuid, boolean) FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.capital_contribution_cash() FROM anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.treasury_entry(uuid, text, numeric, text, date, text, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.transfer_cash(uuid, uuid, numeric, date, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.pay_salary(uuid, uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.partner_balance(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.request_partner_withdrawal(numeric, text, text, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.review_partner_withdrawal(uuid, boolean, text, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.monthly_operating_costs(date, date) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.operating_reserve_settings() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.period_distribution(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.treasury_overview() FROM anon;

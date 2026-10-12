@@ -1,0 +1,2 @@
+REVOKE ALL ON FUNCTION public.update_customer_with_points(uuid, text, text, integer, text) FROM authenticated, PUBLIC, anon;
+DROP FUNCTION public.update_customer_with_points(uuid, text, text, integer, text);

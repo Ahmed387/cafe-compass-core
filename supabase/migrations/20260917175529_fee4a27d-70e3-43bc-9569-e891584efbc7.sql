@@ -1,0 +1,1 @@
+GRANT SELECT ON public.products TO authenticated;

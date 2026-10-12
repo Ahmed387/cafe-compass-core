@@ -1,0 +1,2 @@
+REVOKE EXECUTE ON FUNCTION public.is_root_admin(), public.guard_root_and_super_roles(), public.guard_root_profile(), public.set_user_super_admin(uuid, boolean), public.set_partner_tier(uuid, text), public.set_manager_compensation(uuid, text, numeric, numeric, text), public.set_nav_override(uuid, text, boolean), public.my_owner_statement() FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.guard_root_and_super_roles(), public.guard_root_profile() FROM authenticated;

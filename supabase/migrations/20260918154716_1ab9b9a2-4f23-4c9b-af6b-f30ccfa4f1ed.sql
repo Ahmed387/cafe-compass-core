@@ -1,0 +1,1 @@
+REVOKE ALL ON FUNCTION public.period_pnl(uuid) FROM anon;
