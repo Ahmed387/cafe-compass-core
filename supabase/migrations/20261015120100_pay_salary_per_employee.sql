@@ -86,7 +86,7 @@ BEGIN
   _pay := public._issue_salary_line(_company, _actor, _user_id, _period_start, _period_end);
   SELECT * INTO _s FROM public.salary_payments WHERE id = _pay;
 
-  UPDATE public.salary_payments SET paid_at = (_day::timestamp + time '12:00') AT TIME ZONE 'Africa/Cairo',
+  UPDATE public.salary_payments SET paid_at = public.business_day_start(_day, _company) + interval '12 hours',
     paid_by = _actor, updated_at = now() WHERE id = _pay;
 
   IF COALESCE(_s.net_amount, 0) > 0 THEN
