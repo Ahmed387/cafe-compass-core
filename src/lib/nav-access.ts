@@ -26,6 +26,9 @@ export const NAV_PERMISSIONS: Record<string, string[] | ["*"]> = {
     "/refunds",
     "/menu-studio",
     "/inventory",
+    "/warehouse",
+    "/recipes",
+    "/stocktake",
     "/purchases",
     "/returns",
     "/offers",
@@ -38,6 +41,7 @@ export const NAV_PERMISSIONS: Record<string, string[] | ["*"]> = {
     "/analytics",
     "/users",
     "/staff",
+    "/hr",
     "/guide",
   ],
 
@@ -67,6 +71,9 @@ export const NAV_PERMISSIONS: Record<string, string[] | ["*"]> = {
 export type RouteAccess = { unlimited: boolean; paths: string[]; governed: boolean };
 
 export function routeAccessFor(roleNames: string[] | undefined): RouteAccess {
+  // A signed-in account with no role at all (e.g. floor staff kept only for
+  // attendance) may open nothing but its own home screen.
+  if (!roleNames || roleNames.length === 0) return { unlimited: false, paths: [], governed: true };
   const known = (roleNames ?? []).filter((role) => role in NAV_PERMISSIONS);
   if (known.length === 0) return { unlimited: true, paths: [], governed: false };
   if (known.some((role) => NAV_PERMISSIONS[role]?.[0] === "*")) {
@@ -131,7 +138,11 @@ export function personalAccess(
   if (overrideKey !== undefined) return me.navOverrides[overrideKey] === true;
   if (hubPath && me.navOverrides[hubPath] === false) return false;
   const isSuper = me.roleNames.includes("Super Admin");
-  if (!isSuper && me.partnerTier && (TIER_BLOCKED[me.partnerTier] ?? []).some((p) => under(path, p))) {
+  if (
+    !isSuper &&
+    me.partnerTier &&
+    (TIER_BLOCKED[me.partnerTier] ?? []).some((p) => under(path, p))
+  ) {
     return false;
   }
   return canAccessRoute(access, path);

@@ -20,7 +20,7 @@ import { useAuth } from "@/lib/auth";
 import { formatMoney, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { EmployeeDrawer, JOB_TITLES, type HrRow } from "@/components/hr/EmployeeDrawer";
-import { PaySalaryDialog } from "@/components/hr/PaySalaryDialog";
+import { PaySalaryDialog, type IssuedSalary } from "@/components/hr/PaySalaryDialog";
 import { matches, SmartFilterBar } from "@/modules/shell/SmartFilterBar";
 import { KpiCard, KpiGrid } from "@/components/shared/KpiCard";
 import { businessMonth, monthBounds } from "@/core/finance/business-dates";
@@ -144,6 +144,35 @@ function HrPage() {
 
   const [paying, setPaying] = useState<Row | null>(null);
 
+  // Salary lines already issued for this month (paid or not), to tell "paid" from "issued, unpaid".
+  const issued = useQuery({
+    queryKey: ["salary-payments", "month", start, end],
+    enabled: canView,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("salary_payments")
+        .select(
+          "id, user_id, period_start, period_end, base_amount, bonus, absence_deduction, penalty_deduction, advance_deduction, net_amount, paid_at" as "id",
+        )
+        .eq("status", "active")
+        .eq("salary_kind", "regular")
+        .lte("period_start", end)
+        .gte("period_end", start);
+      if (error) throw error;
+      return (data ?? []) as unknown as IssuedSalary[];
+    },
+  });
+  const issuedFor = (userId: string) => (issued.data ?? []).filter((x) => x.user_id === userId);
+  const isPaid = (userId: string) => issuedFor(userId).some((x) => x.paid_at);
+  const unpaidLine = (userId: string) =>
+    issuedFor(userId)
+      .filter((x) => !x.paid_at)
+      .sort(
+        (a, b) =>
+          Math.abs(Date.parse(a.period_start) - Date.parse(start)) -
+          Math.abs(Date.parse(b.period_start) - Date.parse(start)),
+      )[0] ?? null;
+
   if (!canView) {
     return <NoPermission message={ar ? "هذه الصفحة للسوبر أدمن والشركاء فقط" : "Super Admin and partners only"} />;
   }
@@ -231,11 +260,16 @@ function HrPage() {
                   <td className="font-bold">{money(r.net_pay)}</td>
                   <td>
                     <div className="flex items-center gap-1">
-                      {r.already_generated ? (
+                      {issuedFor(r.user_id).length > 1 && (
+                        <Badge variant="destructive" title={ar ? "فيه أكتر من مرتب متسجل لنفس الشهر — راجعه قبل الصرف" : "More than one salary line for this month — review before paying"}>
+                          {ar ? "مكرر" : "Duplicate"}
+                        </Badge>
+                      )}
+                      {isPaid(r.user_id) ? (
                         <Badge variant="secondary">{ar ? "اتصرف" : "Paid"}</Badge>
                       ) : (
                         manage &&
-                        Number(r.prorated_salary) > 0 && (
+                        (Number(r.prorated_salary) > 0 || unpaidLine(r.user_id)) && (
                           <Button
                             size="sm"
                             onClick={(e) => {
@@ -261,7 +295,7 @@ function HrPage() {
           : "Click an employee to edit or add a bonus/penalty; press Pay to pay their salary on the date you choose — advances and penalties are deducted automatically. Anything above this month's pay is deducted next month."}
       </p>
 
-      <PaySalaryDialog row={paying} start={start} end={end} currency={currency} onClose={() => setPaying(null)} />
+      <PaySalaryDialog row={paying} issued={paying ? unpaidLine(paying.user_id) : null} start={start} end={end} currency={currency} onClose={() => setPaying(null)} />
       <EmployeeDrawer row={selected ? rows.find((x) => x.user_id === selected.user_id) ?? selected : null} onClose={() => setSelected(null)} editable={superAdmin.data === true} canBonus={manage} currency={currency} periodEnd={end} />
     </div>
   );

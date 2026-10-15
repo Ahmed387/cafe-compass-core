@@ -31,14 +31,32 @@ const todayIso = () => new Date().toLocaleDateString("en-CA", { timeZone: "Afric
  * shown in the table is issued (penalties + advances recovered) and paid on the
  * chosen date. Replaces the old team-wide "generate payroll" step.
  */
+/** A salary line already issued (old "run payroll" step) but not yet paid. */
+export type IssuedSalary = {
+  id: string;
+  user_id: string;
+  period_start: string;
+  period_end: string;
+  base_amount: number;
+  bonus: number;
+  absence_deduction: number | null;
+  penalty_deduction: number | null;
+  advance_deduction: number | null;
+  net_amount: number;
+  paid_at: string | null;
+};
+
 export function PaySalaryDialog({
   row,
+  issued,
   start,
   end,
   currency,
   onClose,
 }: {
   row: HrRow | null;
+  /** When set, this exact issued line is paid with its own numbers. */
+  issued?: IssuedSalary | null;
   start: string;
   end: string;
   currency: string;
@@ -79,21 +97,33 @@ export function PaySalaryDialog({
   });
 
   if (!row) return null;
-  const lines: Array<{ label: string; value: number; sign: "+" | "-" }> = [
-    {
-      label: ar ? "المرتب المستحق عن الشهر" : "Salary for the month",
-      value: Number(row.prorated_salary),
-      sign: "+",
-    },
-    { label: ar ? "مكافآت" : "Bonuses", value: Number(row.bonuses), sign: "+" },
-    {
-      label: ar ? `غياب (${row.absent_days} يوم)` : `Absence (${row.absent_days} days)`,
-      value: Number(row.absence_deduction),
-      sign: "-",
-    },
-    { label: ar ? "جزاءات" : "Penalties", value: Number(row.penalties), sign: "-" },
-    { label: ar ? "سلف" : "Advances", value: Number(row.advances), sign: "-" },
-  ];
+  const n = (v: unknown) => Number(v ?? 0);
+  const net = issued ? n(issued.net_amount) : n(row.net_pay);
+  const lines: Array<{ label: string; value: number; sign: "+" | "-" }> = issued
+    ? [
+        { label: ar ? "المرتب المستحق" : "Salary", value: n(issued.base_amount), sign: "+" },
+        { label: ar ? "مكافآت" : "Bonuses", value: n(issued.bonus), sign: "+" },
+        { label: ar ? "غياب" : "Absence", value: n(issued.absence_deduction), sign: "-" },
+        { label: ar ? "جزاءات" : "Penalties", value: n(issued.penalty_deduction), sign: "-" },
+        { label: ar ? "سلف" : "Advances", value: n(issued.advance_deduction), sign: "-" },
+      ]
+    : [
+        {
+          label: ar ? "المرتب المستحق عن الشهر" : "Salary for the month",
+          value: Number(row.prorated_salary),
+          sign: "+",
+        },
+        { label: ar ? "مكافآت" : "Bonuses", value: Number(row.bonuses), sign: "+" },
+        {
+          label: ar ? `غياب (${row.absent_days} يوم)` : `Absence (${row.absent_days} days)`,
+          value: Number(row.absence_deduction),
+          sign: "-",
+        },
+        { label: ar ? "جزاءات" : "Penalties", value: Number(row.penalties), sign: "-" },
+        { label: ar ? "سلف" : "Advances", value: Number(row.advances), sign: "-" },
+      ];
+  const fromDay = issued?.period_start ?? start;
+  const toDay = issued?.period_end ?? end;
 
   return (
     <Dialog open={Boolean(row)} onOpenChange={(open) => !open && onClose()}>
@@ -103,7 +133,11 @@ export function PaySalaryDialog({
             {ar ? `صرف مرتب ${row.employee_name}` : `Pay ${row.employee_name}`}
           </DialogTitle>
           <DialogDescription>
-            {ar ? `عن الفترة ${start} → ${end}` : `For ${start} → ${end}`}
+            {ar ? `عن الفترة ${fromDay} → ${toDay}` : `For ${fromDay} → ${toDay}`}
+            {issued &&
+              (ar
+                ? " — المرتب ده متسجل قبل كده ولسه متصرفش، هيتصرف بنفس أرقامه."
+                : " — already issued but unpaid; it is paid with its own figures.")}
           </DialogDescription>
         </DialogHeader>
 
@@ -121,9 +155,9 @@ export function PaySalaryDialog({
             ))}
           <div className="mt-2 flex justify-between border-t border-border pt-2 font-bold">
             <span>{ar ? "الصافي اللي هيتصرف" : "Net to pay"}</span>
-            <span className="tabular-nums text-primary">{money(row.net_pay)}</span>
+            <span className="tabular-nums text-primary">{money(net)}</span>
           </div>
-          {Number(row.carried_forward) > 0 && (
+          {!issued && Number(row.carried_forward) > 0 && (
             <p className="pt-1 text-xs text-amber-600">
               {ar
                 ? `فاضل ${money(row.carried_forward)} سلف/جزاءات أكبر من المرتب — هتتخصم من الشهر الجاي تلقائياً.`
@@ -162,7 +196,7 @@ export function PaySalaryDialog({
             {ar ? "إلغاء" : "Cancel"}
           </Button>
           <Button onClick={() => pay.mutate()} disabled={pay.isPending}>
-            {ar ? `صرف ${money(row.net_pay)}` : `Pay ${money(row.net_pay)}`}
+            {ar ? `صرف ${money(net)}` : `Pay ${money(net)}`}
           </Button>
         </DialogFooter>
       </DialogContent>
