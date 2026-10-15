@@ -122,9 +122,59 @@ export function WarehousePage() {
     onError: (e) => toast.error(friendlyError(e)),
   });
 
+  // Suggested refill: enough for 2 days of the last week's average use (never below
+  // the bar's reorder level), minus what the bar holds, capped at the main store.
+  const suggest = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc(
+        "bar_refill_suggestions" as never,
+        {
+          _branch_id: currentBranchId!,
+          _days: 2,
+        } as never,
+      );
+      if (error) throw error;
+      return (data ?? []) as unknown as { item_id: string; suggested: number }[];
+    },
+    onSuccess: (rows) => {
+      const next: Record<string, string> = {};
+      for (const r of rows)
+        if (Number(r.suggested) > 0) next[r.item_id] = String(Number(r.suggested));
+      setDraft(next);
+      toast.success(
+        Object.keys(next).length
+          ? `اتملت كميات ${Object.keys(next).length} صنف — راجعها وحوّل`
+          : "مخزن الكافيه مكفّي، مفيش حاجة محتاجة تتحول",
+      );
+    },
+    onError: (e) => toast.error(friendlyError(e)),
+  });
+
+  // Managers move stock in one step: the request is created and approved together.
+  const transferNow = useMutation({
+    mutationFn: async (items: { item_id: string; quantity: number }[]) => {
+      const { data: id, error } = await supabase.rpc("request_stock_transfer", {
+        _branch_id: currentBranchId!,
+        _items: items,
+      });
+      if (error) throw error;
+      const { error: e2 } = await supabase.rpc("decide_stock_transfer", {
+        _id: id as unknown as string,
+        _approve: true,
+      });
+      if (e2) throw e2;
+    },
+    onSuccess: () => {
+      toast.success("اتحوّلت الكميات لمخزن الكافيه");
+      setDraft({});
+      refresh();
+    },
+    onError: (e) => toast.error(friendlyError(e)),
+  });
+
   const decide = useMutation({
     mutationFn: async (v: { id: string; approve: boolean }) => {
-      const reason = v.approve ? null : window.prompt("سبب الرفض؟") ?? "";
+      const reason = v.approve ? null : (window.prompt("سبب الرفض؟") ?? "");
       const { error } = await supabase.rpc("decide_stock_transfer", {
         _id: v.id,
         _approve: v.approve,
@@ -169,12 +219,15 @@ export function WarehousePage() {
   return (
     <div dir="rtl" className="space-y-6">
       <PageHeader
-        title="المخزن الرئيسي ومخزن البار"
-        description="التحويل من المخزن الرئيسي إلى البار يحتاج موافقة المدير. البيع في الكاشير يخصم من البار."
+        title="المخزن الكبير ومخزن الكافيه"
+        description="البضاعة بتتخزن في المخزن الكبير، والبيع بيخصم من مخزن الكافيه (البار). حوّل للكافيه كل يوم بزرار «اقترح الكميات»."
       />
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span>الفرق بين المخزن والبار؟</span>
-        <InfoTip title="المخزن الرئيسي والبار">المخزن الرئيسي هو المكان اللي البضاعة بتتشال فيه بعد الشراء. البار هو الكمية اللي قدامك وبتشتغل منها، وأي بيعة في الكاشير بتخصم من البار بس. الإجمالي = الرئيسي + البار.</InfoTip>
+        <InfoTip title="المخزن الرئيسي والبار">
+          المخزن الرئيسي هو المكان اللي البضاعة بتتشال فيه بعد الشراء. البار هو الكمية اللي قدامك
+          وبتشتغل منها، وأي بيعة في الكاشير بتخصم من البار بس. الإجمالي = الرئيسي + البار.
+        </InfoTip>
       </div>
 
       {low.length > 0 && (
@@ -203,9 +256,24 @@ export function WarehousePage() {
       )}
 
       <KpiGrid cols={3}>
-        <KpiCard label="إجمالي الأصناف" value={rows.length} tone="brand" formula="عدد الأصناف المطابقة للبحث والفلاتر الحالية." />
-        <KpiCard label="أصناف وصلت لحد إعادة الطلب" value={rows.filter((r) => r.barMin > 0 && r.bar <= r.barMin).length} tone="bad" formula="رصيد البار أقل من أو يساوي حد إعادة الطلب." />
-        <KpiCard label="قيمة المخزون الإجمالية" value={formatMoney(rows.reduce((t, r) => t + r.total * r.cost, 0))} hint={`البار: ${formatMoney(rows.reduce((t, r) => t + r.bar * r.cost, 0))}`} formula="مجموع إجمالي رصيد الفرع × تكلفة الوحدة لكل صنف." />
+        <KpiCard
+          label="إجمالي الأصناف"
+          value={rows.length}
+          tone="brand"
+          formula="عدد الأصناف المطابقة للبحث والفلاتر الحالية."
+        />
+        <KpiCard
+          label="أصناف وصلت لحد إعادة الطلب"
+          value={rows.filter((r) => r.barMin > 0 && r.bar <= r.barMin).length}
+          tone="bad"
+          formula="رصيد البار أقل من أو يساوي حد إعادة الطلب."
+        />
+        <KpiCard
+          label="قيمة المخزون الإجمالية"
+          value={formatMoney(rows.reduce((t, r) => t + r.total * r.cost, 0))}
+          hint={`البار: ${formatMoney(rows.reduce((t, r) => t + r.bar * r.cost, 0))}`}
+          formula="مجموع إجمالي رصيد الفرع × تكلفة الوحدة لكل صنف."
+        />
       </KpiGrid>
       <div className="flex flex-wrap items-start gap-2">
         <div className="min-w-64 flex-1">
@@ -213,17 +281,44 @@ export function WarehousePage() {
             search={q}
             onSearch={setQ}
             placeholder="بحث عن صنف…"
-            filters={[{ key: "low", label: "الحالة", value: onlyLow, onChange: setOnlyLow, options: [{ value: "all", label: "كل الأصناف" }, { value: "low", label: "الناقص في البار فقط" }] }]}
+            filters={[
+              {
+                key: "low",
+                label: "الحالة",
+                value: onlyLow,
+                onChange: setOnlyLow,
+                options: [
+                  { value: "all", label: "كل الأصناف" },
+                  { value: "low", label: "الناقص في البار فقط" },
+                ],
+              },
+            ]}
           />
         </div>
-        <Button
-          disabled={draftItems.length === 0 || request.isPending}
-          onClick={() => request.mutate(draftItems)}
-        >
-          <ArrowLeftRight className="ml-2 h-4 w-4" />
-          طلب تحويل إلى البار ({draftItems.length})
+        <Button variant="outline" disabled={suggest.isPending} onClick={() => suggest.mutate()}>
+          اقترح الكميات (تكفي يومين)
         </Button>
-        <InfoTip title="التحويل">اكتب الكمية اللي عايز تنقلها من المخزن الرئيسي للبار. الطلب بيروح للمدير يوافق عليه، وبعد الموافقة الكمية بتتخصم من الرئيسي وتتزود في البار. الإجمالي ما بيتغيرش.</InfoTip>
+        {canApprove ? (
+          <Button
+            disabled={draftItems.length === 0 || transferNow.isPending}
+            onClick={() => transferNow.mutate(draftItems)}
+          >
+            <ArrowLeftRight className="ml-2 h-4 w-4" />
+            حوّل لمخزن الكافيه دلوقتي ({draftItems.length})
+          </Button>
+        ) : (
+          <Button
+            disabled={draftItems.length === 0 || request.isPending}
+            onClick={() => request.mutate(draftItems)}
+          >
+            <ArrowLeftRight className="ml-2 h-4 w-4" />
+            اطلب تحويل لمخزن الكافيه ({draftItems.length})
+          </Button>
+        )}
+        <InfoTip title="التحويل">
+          اكتب الكمية اللي عايز تنقلها من المخزن الرئيسي للبار. الطلب بيروح للمدير يوافق عليه، وبعد
+          الموافقة الكمية بتتخصم من الرئيسي وتتزود في البار. الإجمالي ما بيتغيرش.
+        </InfoTip>
       </div>
 
       <div className="rounded-lg border">
@@ -231,9 +326,30 @@ export function WarehousePage() {
           <TableHeader>
             <TableRow>
               <TableHead>الصنف</TableHead>
-              <TableHead><span className="inline-flex items-center gap-1">المخزن الرئيسي<InfoTip>البضاعة المتشالة في المخزن، لسه مانزلتش البار.</InfoTip></span></TableHead>
-              <TableHead><span className="inline-flex items-center gap-1">البار<InfoTip>الكمية اللي في البار وبيتخصم منها البيع على طول.</InfoTip></span></TableHead>
-              <TableHead><span className="inline-flex items-center gap-1">حد طلب البار<InfoTip title="حد طلب البار">رقم تحذيري بتحدده عشان تقول للسيستم: لو الكمية وصلت للرقم ده، ابدأ نبهني. هو مش كمية بضاعة فعلية، ده خط إنذار أحمر. مثال: لو حطيته 2 كيلو، أول ما البار يوصل 2 كيلو هيظهرلك تنبيه تطلب من المخزن.</InfoTip></span></TableHead>
+              <TableHead>
+                <span className="inline-flex items-center gap-1">
+                  المخزن الكبير<InfoTip>البضاعة المتشالة في المخزن، لسه مانزلتش الكافيه.</InfoTip>
+                </span>
+              </TableHead>
+              <TableHead>
+                <span className="inline-flex items-center gap-1">
+                  مخزن الكافيه
+                  <InfoTip>
+                    الكمية اللي في الكافيه وبيتخصم منها البيع على طول. لو بالسالب يبقى اتباع أكتر من
+                    اللي اتحوّل.
+                  </InfoTip>
+                </span>
+              </TableHead>
+              <TableHead>
+                <span className="inline-flex items-center gap-1">
+                  حد طلب البار
+                  <InfoTip title="حد طلب البار">
+                    رقم تحذيري بتحدده عشان تقول للسيستم: لو الكمية وصلت للرقم ده، ابدأ نبهني. هو مش
+                    كمية بضاعة فعلية، ده خط إنذار أحمر. مثال: لو حطيته 2 كيلو، أول ما البار يوصل 2
+                    كيلو هيظهرلك تنبيه تطلب من المخزن.
+                  </InfoTip>
+                </span>
+              </TableHead>
               <TableHead>قيمة البار</TableHead>
               <TableHead>كمية التحويل</TableHead>
             </TableRow>
@@ -300,7 +416,11 @@ export function WarehousePage() {
                       : "secondary"
                 }
               >
-                {t.status === "approved" ? "تمت الموافقة" : t.status === "rejected" ? "مرفوض" : "قيد الانتظار"}
+                {t.status === "approved"
+                  ? "تمت الموافقة"
+                  : t.status === "rejected"
+                    ? "مرفوض"
+                    : "قيد الانتظار"}
               </Badge>
               <span className="text-sm text-muted-foreground">{formatDateTime(t.created_at)}</span>
               <div className="flex-1" />
