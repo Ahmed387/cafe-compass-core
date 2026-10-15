@@ -20,6 +20,7 @@ import { useAuth } from "@/lib/auth";
 import { formatMoney, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { EmployeeDrawer, JOB_TITLES, type HrRow } from "@/components/hr/EmployeeDrawer";
+import { PaySalaryDialog } from "@/components/hr/PaySalaryDialog";
 import { matches, SmartFilterBar } from "@/modules/shell/SmartFilterBar";
 import { KpiCard, KpiGrid } from "@/components/shared/KpiCard";
 import { businessMonth, monthBounds } from "@/core/finance/business-dates";
@@ -141,23 +142,7 @@ function HrPage() {
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["hr-preview"] });
 
-  const runPayroll = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.rpc("run_payroll", { _period_start: start, _period_end: end });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success(ar ? "تم إصدار رواتب الشهر" : "Payroll generated");
-      refresh();
-      qc.invalidateQueries({ queryKey: ["salary-payments"] });
-    },
-    onError: (e) =>
-      toast.error(
-        (e as Error).message?.includes("already generated")
-          ? ar ? "رواتب هذا الشهر صدرت بالفعل" : "Payroll already generated for this month"
-          : friendlyError(e, lang),
-      ),
-  });
+  const [paying, setPaying] = useState<Row | null>(null);
 
   if (!canView) {
     return <NoPermission message={ar ? "هذه الصفحة للسوبر أدمن والشركاء فقط" : "Super Admin and partners only"} />;
@@ -178,11 +163,6 @@ function HrPage() {
               <Label className="text-xs">{ar ? "الشهر" : "Month"}</Label>
               <Input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} />
             </div>
-            {manage && (
-              <Button onClick={() => runPayroll.mutate()} disabled={runPayroll.isPending || rows.length === 0}>
-                {ar ? "إصدار رواتب الشهر" : "Generate payroll"}
-              </Button>
-            )}
           </div>
         }
       />
@@ -193,22 +173,6 @@ function HrPage() {
         <KpiCard label={ar ? "الجزاءات المعلقة (الشهر)" : "Pending penalties (month)"} value={money((pendingPenalties.data ?? []).reduce((sum, row) => sum + Number(row.amount), 0))} tone={(pendingPenalties.data ?? []).length > 0 ? "bad" : undefined} formula={ar ? "مجموع الجزاءات غير المسوّاة المسجلة داخل الشهر المختار." : "Unsettled penalties recorded in the selected month."} details={<div className="space-y-2">{(pendingPenalties.data ?? []).map((row, index) => { const profile = row.user_profiles as unknown as { display_name: string | null; first_name: string } | null; return <div key={`${row.staff_id}-${index}`} className="flex justify-between gap-3 rounded-lg border border-border p-3 text-sm"><span>{profile?.display_name || profile?.first_name || "—"}</span><span className="font-semibold tabular-nums text-destructive">{money(Number(row.amount))}</span></div>; })}</div>} />
         <KpiCard label={ar ? "إجمالي الرواتب" : "Total payroll"} value={money(shownRows.reduce((s, r) => s + Number(r.net_pay), 0))} hint={`${ar ? "ساعات" : "Hours"}: ${totals.hours.toFixed(1)}`} formula={ar ? "مجموع صافي رواتب الموظفين الظاهرين بعد الجزاءات والمكافآت." : "Sum of displayed employees' net pay after penalties and bonuses."} details={<div className="space-y-2">{shownRows.map((row) => <div key={row.user_id} className="flex justify-between gap-3 rounded-lg border border-border p-3 text-sm"><span>{row.employee_name}</span><span className="font-semibold tabular-nums">{money(Number(row.net_pay))}</span></div>)}</div>} />
       </KpiGrid>
-      <div className="hidden">
-        {[
-          { l: ar ? "صافي الرواتب" : "Net payroll", v: money(totals.net) },
-          { l: ar ? "ساعات العمل" : "Worked hours", v: totals.hours.toFixed(1) },
-          { l: ar ? "الجزاءات" : "Penalties", v: money(totals.pen) },
-          { l: ar ? "المكافآت" : "Bonuses", v: money(totals.bon) },
-        ].map((c) => (
-          <Card key={c.l}>
-            <CardHeader className="pb-1">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{c.l}</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 text-2xl font-bold">{c.v}</CardContent>
-          </Card>
-        ))}
-      </div>
-
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex-1">
           <SmartFilterBar search={q} onSearch={setQ} placeholder={ar ? "ابحث باسم الموظف أو الوظيفة…" : "Search staff or job…"} />
@@ -227,7 +191,7 @@ function HrPage() {
                 <th>{ar ? "غياب" : "Absence"}</th>
                 <th>{ar ? "جزاءات" : "Penalties"}</th>
                 <th>{ar ? "سلف" : "Advances"}</th>
-                <th>{ar ? "مُرحّل للشهر الجاي" : "Carried"}</th>
+                <th>{ar ? "يتخصم الشهر الجاي" : "Moves to next month"}</th>
                 <th>{ar ? "مكافآت" : "Bonuses"}</th>
                 <th>{ar ? "صافي الدفع" : "Net pay"}</th>
                 <th />
@@ -267,7 +231,22 @@ function HrPage() {
                   <td className="font-bold">{money(r.net_pay)}</td>
                   <td>
                     <div className="flex items-center gap-1">
-                      {r.already_generated && <Badge variant="secondary">{ar ? "صدر" : "Issued"}</Badge>}
+                      {r.already_generated ? (
+                        <Badge variant="secondary">{ar ? "اتصرف" : "Paid"}</Badge>
+                      ) : (
+                        manage &&
+                        Number(r.prorated_salary) > 0 && (
+                          <Button
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPaying(r);
+                            }}
+                          >
+                            {ar ? "صرف" : "Pay"}
+                          </Button>
+                        )
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -278,10 +257,11 @@ function HrPage() {
       </Card>
       <p className="text-xs text-muted-foreground">
         {ar
-          ? "اضغط على أي موظف لتعديل بياناته وإضافة مكافأة أو خصم. الخصم بيمشي بالترتيب: الغياب، بعدين الجزاءات، بعدين السلف — ومش بيعدّي المرتب أبداً. أي باقي بيتنقل للشهر الجاي في عمود «مُرحّل» ومش بيتمسح."
-          : "Click any employee to edit, add bonuses or penalties. Deductions go absence → penalties → advances and never exceed pay. Anything left rolls to next month (Carried) — it is never wiped."}
+          ? "اضغط على الموظف لتعديل بياناته أو إضافة مكافأة/خصم، واضغط «صرف» لصرف مرتبه في التاريخ اللي تختاره — السلف والجزاءات بتتخصم تلقائياً ساعة الصرف. لو الخصومات أكبر من المرتب، الباقي بيتخصم الشهر الجاي."
+          : "Click an employee to edit or add a bonus/penalty; press Pay to pay their salary on the date you choose — advances and penalties are deducted automatically. Anything above this month's pay is deducted next month."}
       </p>
 
+      <PaySalaryDialog row={paying} start={start} end={end} currency={currency} onClose={() => setPaying(null)} />
       <EmployeeDrawer row={selected ? rows.find((x) => x.user_id === selected.user_id) ?? selected : null} onClose={() => setSelected(null)} editable={superAdmin.data === true} canBonus={manage} currency={currency} periodEnd={end} />
     </div>
   );

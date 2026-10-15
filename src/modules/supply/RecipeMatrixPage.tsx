@@ -1,3 +1,4 @@
+import { WasteCell } from "@/modules/supply/WasteCell";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
@@ -179,7 +180,7 @@ export function RecipeMatrixPage() {
                         <option value="">— الخامة —</option>
                         {(base.data?.inv ?? []).map((i) => (
                           <option key={i.id} value={i.id}>
-                            {i.name}
+                            {i.name} ({formatMoney(i.cost)}/{unitLabel(i.unit)})
                           </option>
                         ))}
                       </select>
@@ -218,7 +219,22 @@ export function RecipeMatrixPage() {
                           </option>
                         ))}
                       </select>
-                      <span className="w-20 text-xs text-muted-foreground">{formatMoney(lineCost(l))}</span>
+                      {inv && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground" title="نسبة الهالك للخامة دي (متابعة بس — مش بتزود التكلفة)">
+                          <span>هالك</span>
+                          <div className="w-16">
+                            <WasteCell itemId={inv.id} value={inv.waste} editable={canEdit} lang="ar" />
+                          </div>
+                        </div>
+                      )}
+                      <span className="min-w-28 text-xs text-muted-foreground" dir="rtl">
+                        <b className="text-foreground">{formatMoney(lineCost(l))}</b>
+                        {inv && Number(l.qty) > 0 && (
+                          <span className="block">
+                            {l.qty} {unitLabel(l.unit)} × {formatMoney(fromStockUnit(1, l.unit, inv.unit) * inv.cost)}/{unitLabel(l.unit)}
+                          </span>
+                        )}
+                      </span>
                       {canEdit && (
                         <Button
                           size="icon"

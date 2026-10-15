@@ -492,9 +492,8 @@ function PosPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("payment_methods")
-        .select(
-          "id, key, name, kind",
-        )
+        // receiver_account: InstaPay handle / wallet number the customer pays to.
+        .select("id, key, name, kind, receiver_account" as "id, key, name, kind")
         .eq("is_active", true)
         .order("name");
       if (error) throw error;
@@ -2614,6 +2613,12 @@ function PosPage() {
                       )}
                     </div>
 
+                    {(method as { receiver_account?: string | null } | undefined)?.receiver_account && (
+                      <p className="rounded-md bg-muted px-2 py-1 text-sm" dir="ltr">
+                        <span className="text-muted-foreground">{lang === "ar" ? "حوّل على: " : "Send to: "}</span>
+                        <b className="select-all">{(method as { receiver_account?: string | null }).receiver_account}</b>
+                      </p>
+                    )}
                     {isCashback && (
                       <p className="text-xs text-muted-foreground">
                         {lang === "ar"

@@ -15,7 +15,16 @@ const FACTORS: Record<string, { family: "mass" | "volume" | "count"; f: number }
 
 const norm = (u: string | null | undefined) => (u ?? "").trim().toLowerCase();
 
-export const UNIT_LABEL: Record<string, string> = { g: "جم", kg: "كجم", ml: "مل", l: "لتر", piece: "قطعة" };
+export const UNIT_LABEL: Record<string, string> = {
+  g: "جم",
+  kg: "كجم",
+  ml: "مل",
+  l: "لتر",
+  liter: "لتر",
+  piece: "قطعة",
+  pcs: "قطعة",
+  box: "علبة",
+};
 
 /** Units the user may enter for an item stocked in `stockUnit`. */
 export function compatibleUnits(stockUnit: string): string[] {

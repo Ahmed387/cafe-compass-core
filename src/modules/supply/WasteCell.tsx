@@ -38,6 +38,7 @@ export function WasteCell({
     onSuccess: () => {
       toast.success(lang === "ar" ? "اتحفظت نسبة الهالك" : "Waste % saved");
       qc.invalidateQueries({ queryKey: ["inventory-items"] });
+      qc.invalidateQueries({ queryKey: ["recipe-matrix-base"] });
     },
     onError: (e) => {
       setText(String(value));

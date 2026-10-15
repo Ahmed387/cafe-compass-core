@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { netInvoiceTotal, saleRefundTotal } from "@/core/finance/formulas";
 import { formatDateTime, formatMoney, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { invoiceSequence, printReceipt } from "@/lib/receipt";
@@ -104,7 +105,10 @@ export function OrderDetailsDialog({
     },
   });
 
-  const refundedTotal = (refunds.data ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
+  // Refunds that cut the sale vs. money given back for lines already removed from the total.
+  const refundedTotal = saleRefundTotal(refunds.data);
+  const removedReturned =
+    (refunds.data ?? []).reduce((sum, r) => sum + Number(r.amount), 0) - refundedTotal;
 
   // Cashback moves recorded against this order (for the reprinted receipt).
   const wallet = useQuery({
@@ -122,7 +126,8 @@ export function OrderDetailsDialog({
     },
   });
 
-  const refundable = Math.max(0, Number(order?.total ?? 0) - refundedTotal);
+  const netTotal = order ? netInvoiceTotal(order, refunds.data) : 0;
+  const refundable = order?.status === "cancelled" ? 0 : netTotal;
 
   // Cashiers return orders of their own still-open shift without a manager
   // (same rule as the server's can_refund_order).
@@ -355,10 +360,15 @@ export function OrderDetailsDialog({
                     value={`-${formatMoney(refundedTotal, currency, lang)}`}
                   />
                 )}
+                {removedReturned > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("orders.removedReturned")}: {formatMoney(removedReturned, currency, lang)}
+                  </p>
+                )}
                 <div className="mt-3 flex items-end justify-between border-t border-border pt-3">
                   <span className="font-semibold">{t("orders.netCollected")}</span>
                   <span className="font-mono text-xl font-bold text-primary">
-                    {formatMoney(Math.max(0, Number(order.total) - refundedTotal), currency, lang)}
+                    {formatMoney(netTotal, currency, lang)}
                   </span>
                 </div>
               </div>

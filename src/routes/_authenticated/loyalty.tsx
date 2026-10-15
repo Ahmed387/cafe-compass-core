@@ -344,6 +344,27 @@ function EditCustomerDialog({ customer, onClose, money, lang }: {
     },
     onError: (e) => toast.error(friendlyError(e, lang)),
   });
+  const remove = useMutation({
+    mutationFn: async () => {
+      if (!customer) return null;
+      const { data, error } = await supabase.rpc("delete_customer" as never, { _customer_id: customer.id } as never);
+      if (error) throw error;
+      return data as unknown as string;
+    },
+    onSuccess: (mode) => {
+      toast.success(
+        mode === "archived"
+          ? ar ? "العميل ليه فواتير، فاتشال من القوائم وسجله محفوظ" : "Customer has invoices, so they were archived (history kept)"
+          : ar ? "تم حذف العميل" : "Customer deleted",
+      );
+      qc.invalidateQueries({ queryKey: ["cashback-customers"] });
+      qc.invalidateQueries({ queryKey: ["cashback-liability"] });
+      onClose();
+    },
+    onError: (e) => toast.error(friendlyError(e, lang)),
+  });
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  useEffect(() => setConfirmDelete(false), [customer]);
   const amount = Number(delta);
   const valid = name.trim().length > 0 && (!amount || reason.trim().length >= 3);
 
@@ -366,7 +387,22 @@ function EditCustomerDialog({ customer, onClose, money, lang }: {
             </div>
           </div>
         </div>
-        <DialogFooter><Button disabled={!valid || save.isPending} onClick={() => save.mutate()}>{ar ? "احفظ" : "Save"}</Button></DialogFooter>
+        <DialogFooter className="gap-2 sm:justify-between">
+          {confirmDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-destructive">{ar ? "متأكد؟" : "Sure?"}</span>
+              <Button variant="destructive" size="sm" disabled={remove.isPending} onClick={() => remove.mutate()}>
+                {ar ? "أيوه احذف" : "Yes, delete"}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>{ar ? "لا" : "No"}</Button>
+            </div>
+          ) : (
+            <Button variant="outline" className="border-destructive/40 text-destructive" onClick={() => setConfirmDelete(true)}>
+              {ar ? "حذف العميل" : "Delete customer"}
+            </Button>
+          )}
+          <Button disabled={!valid || save.isPending} onClick={() => save.mutate()}>{ar ? "احفظ" : "Save"}</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

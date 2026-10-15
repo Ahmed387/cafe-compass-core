@@ -32,3 +32,27 @@ export function normalizeTender(methodKey: string | null | undefined): TenderKey
 export function sum(values: number[]) {
   return round2(values.reduce((acc, value) => acc + n(value), 0));
 }
+
+type RefundLike = { amount: number | string; status?: string | null; origin?: string | null };
+
+/**
+ * Refunds that lower an invoice's sale value. A removed line already left
+ * orders.total, so its automatic refund (origin "void") only moves cash and is
+ * excluded here — mirrors the SQL revenue rule (migration 20261015120000).
+ */
+export function saleRefundTotal(refunds: RefundLike[] | null | undefined) {
+  return sum(
+    (refunds ?? [])
+      .filter((r) => (r.status ?? "active") === "active" && (r.origin ?? "manual") !== "void")
+      .map((r) => n(r.amount)),
+  );
+}
+
+/** Net value an invoice keeps as a sale: 0 when cancelled, else total − sale refunds. */
+export function netInvoiceTotal(
+  order: { total: number | string; status?: string | null },
+  refunds: RefundLike[] | null | undefined,
+) {
+  if (order.status === "cancelled") return 0;
+  return Math.max(0, round2(n(order.total) - saleRefundTotal(refunds)));
+}
