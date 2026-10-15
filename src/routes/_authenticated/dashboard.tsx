@@ -10,12 +10,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { auditLabels } from "@/lib/audit-labels";
 import { formatDateTime, formatMoney } from "@/lib/format";
-import { businessDayStartIso, monthToDate, rangeLabel } from "@/core/finance/business-dates";
-import { useRangePnl } from "@/modules/finance/finance-queries";
-import { KpiCard } from "@/components/shared/KpiCard";
+import { businessDayStartIso, monthToDate } from "@/core/finance/business-dates";
 import { useFinancialEngine } from "@/core/hooks/useFinancialEngine";
 import { useI18n } from "@/lib/i18n";
 import { OwnerStatementPanel } from "@/modules/governance/OwnerStatementPanel";
+import { LivePositionPanel } from "@/modules/finance/LivePositionPanel";
 import { BarLowStockAlert, useBarLowStock } from "@/modules/supply/bar-low-stock";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -92,9 +91,7 @@ function DashboardPage() {
   const currency = me?.company?.currency ?? "EGP";
   const money = (v: number) => formatMoney(v, currency, lang);
   const allowedMoney = can("reports.profit") || can("expenses.view");
-  const canProfit = can("reports.profit") || can("partners.view_profit");
   const mtd = monthToDate();
-  const pnl = useRangePnl(mtd.start, mtd.end, canProfit);
 
   const ops = useQuery({
     queryKey: ["dashboard-ops", currentBranchId, mtd.start],
@@ -124,10 +121,6 @@ function DashboardPage() {
   });
   const engine = useFinancialEngine({ branchId: currentBranchId, shiftIds: ops.data?.ids ?? [], enabled: allowedMoney });
   const t0 = engine.data?.totals;
-  // Profit figures come from the company P&L (same numbers as the P&L page); revenue falls back to shifts.
-  const revenue = pnl.data?.revenue ?? t0?.netSales ?? 0;
-  const netProfit = pnl.data?.net_profit ?? 0;
-  const opex = pnl.data?.operating_total ?? (t0 ? t0.shiftExpenses : 0);
   const maxDay = Math.max(1, ...(ops.data?.days ?? []).map((d) => d.sales));
   const weekTotal = (ops.data?.days ?? []).reduce((s, d) => s + d.sales, 0);
   const weekOrders = (ops.data?.days ?? []).reduce((s, d) => s + d.orders, 0);
@@ -155,19 +148,7 @@ function DashboardPage() {
 
       {can("inventory.view") && <BarLowStockAlert items={barLow.items} showLink />}
 
-      {allowedMoney && (
-        <section>
-          <p className="mb-2 text-xs font-medium text-muted-foreground">
-            {ar ? "من أول الشهر لحد النهارده" : "Month to date"} · {rangeLabel(mtd.start, mtd.end, lang)}
-          </p>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KpiCard size="master" label={ar ? "إجمالي الإيراد" : "Total revenue"} value={money(revenue)} hint={`${t0?.shiftCount ?? 0} ${ar ? "وردية" : "shifts"}`} tone="brand" formula={ar ? "صافي الإيراد من أول الشهر (بعد العروض والخصومات والمرتجعات، من غير ضريبة)." : "Month-to-date net revenue (after offers, discounts and refunds, ex-VAT)."} source={ar ? "المصدر: قائمة الدخل الموحدة." : "Source: unified P&L."} />
-            {canProfit && <KpiCard size="master" label={ar ? "صافي الربح" : "Net profit"} value={money(netProfit)} tone={netProfit < 0 ? "bad" : "good"} formula={ar ? "نفس صافي الربح في صفحة قائمة الدخل: بعد الخامات والهالك والمصروفات والرواتب." : "Same net profit as the P&L page: after COGS, waste, expenses and payroll."} source={ar ? "المصدر: قائمة الدخل الموحدة." : "Source: unified P&L."} />}
-            <KpiCard size="master" label={ar ? "مصاريف التشغيل" : "Operating costs"} value={money(opex)} tone="warn" formula={canProfit ? (ar ? "المصروفات المعتمدة + الرواتب + فروق الدرج." : "Approved expenses + payroll + drawer differences.") : (ar ? "مصروفات الدرج في ورديات الشهر." : "Drawer expenses in this month's shifts.")} />
-            <KpiCard size="master" label={ar ? "الوردية الحالية" : "Current shift"} value={ops.data?.open ? (ar ? "مفتوحة" : "Open") : ar ? "لا توجد" : "None"} hint={ops.data?.open ? `${ar ? "منذ" : "Since"} ${formatDateTime(ops.data.open.opened_at, lang)}` : ar ? "افتح وردية من نقطة البيع" : "Open one from POS"} tone={ops.data?.open ? "good" : undefined} formula={ar ? "حالة آخر وردية في الفرع الحالي." : "Status of the latest shift in this branch."} />
-          </div>
-        </section>
-      )}
+      {allowedMoney && <LivePositionPanel />}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Card className="rounded-2xl shadow-sm">
