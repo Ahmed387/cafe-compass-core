@@ -12,7 +12,7 @@ import { PreparedDisposition, useDisposition } from "@/components/orders/Prepare
 import { Pagination } from "@/components/shared";
 import { ShortageBearerCell } from "@/modules/operations/ShortageBearerCell";
 import { KpiCard, KpiDetailRows, KpiGrid } from "@/components/shared/KpiCard";
-import { emptyTenders, normalizeTender, type TenderKey } from "@/core/finance/formulas";
+import { emptyTenders, normalizeTender, type TenderKey, netInvoiceTotal, saleRefundTotal } from "@/core/finance/formulas";
 import { EditClosingCashButton } from "@/modules/operations/EditClosingCashButton";
 
 import { Badge } from "@/components/ui/badge";
@@ -165,7 +165,7 @@ function OrdersPage() {
     let query = supabase
       .from("orders")
       .select(
-        "id, order_number, order_type, status, subtotal, discount_amount, tax_amount, total, created_at, cancel_reason, customer_id, customer_name, customer_phone, notes, shift_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name)), order_payments(method_key, amount), order_refunds(amount, status), partner_tab_orders(id, total_amount, is_settled)",
+        "id, order_number, order_type, status, subtotal, discount_amount, tax_amount, total, created_at, cancel_reason, customer_id, customer_name, customer_phone, notes, shift_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name)), order_payments(method_key, amount), order_refunds(amount, status, origin), partner_tab_orders(id, total_amount, is_settled)",
         { count: "exact" },
       )
       .eq("branch_id", branchId)
@@ -428,7 +428,7 @@ function OrdersPage() {
         supabase
           .from("orders")
           .select(
-            "id, order_number, status, subtotal, discount_amount, total, notes, cancel_reason, created_at, order_items(id, product_id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, products(categories(name, name_ar)), order_item_modifiers(name, price_delta)), order_payments(method_key, amount), order_refunds(order_item_id, amount, method_key, reason, status)",
+            "id, order_number, status, subtotal, discount_amount, total, notes, cancel_reason, created_at, order_items(id, product_id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, products(categories(name, name_ar)), order_item_modifiers(name, price_delta)), order_payments(method_key, amount), order_refunds(order_item_id, amount, method_key, reason, status, origin)",
           )
           .eq("shift_id", shift.id)
           .order("created_at", { ascending: true }),
@@ -637,11 +637,10 @@ function OrdersPage() {
     <KpiDetailRows
       empty={ar ? "لا توجد فواتير ضمن النطاق." : "No invoices in this range."}
       rows={detailOrders.filter(predicate).map((order) => {
-        const refunded = (order.order_refunds ?? []).filter((row) => row.status === "active").reduce((sum, row) => sum + Number(row.amount), 0);
         return {
           label: `#${invoiceSequence(order.order_number)}`,
           hint: `${formatDateTime(order.created_at, lang)} · ${(order.order_payments ?? []).map((payment) => payment.method_key).join(" + ") || "—"}`,
-          value: formatMoney(order.status === "cancelled" ? 0 : Number(order.total) - refunded, currency, lang),
+          value: formatMoney(netInvoiceTotal(order, order.order_refunds), currency, lang),
         };
       })}
     />
@@ -840,10 +839,8 @@ function OrdersPage() {
                     const tab = Array.isArray(tabRel) ? tabRel[0] : tabRel;
                     const onPartnerTab = Boolean(tab && !tab.is_settled);
                     // Gross = invoice total before refunds; Net = gross - active refunds.
-                    const refundedAmount = (order.order_refunds ?? [])
-                      .filter((refund) => refund.status === "active")
-                      .reduce((sum, refund) => sum + Number(refund.amount), 0);
-                    const netTotal = Math.max(0, Number(order.total) - refundedAmount);
+                    const refundedAmount = saleRefundTotal(order.order_refunds);
+                    const netTotal = netInvoiceTotal(order, order.order_refunds);
                     return (
                       <TableRow
                         key={order.id}

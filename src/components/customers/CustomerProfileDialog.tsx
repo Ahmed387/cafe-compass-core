@@ -1,3 +1,4 @@
+import { netInvoiceTotal } from "@/core/finance/formulas";
 import { useRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 
@@ -62,7 +63,7 @@ export function CustomerProfileDialog({
         supabase
           .from("orders")
           .select(
-            "id, order_number, created_at, order_type, status, total, order_payments(method_key), order_refunds(amount, status)",
+            "id, order_number, created_at, order_type, status, total, order_payments(method_key), order_refunds(amount, status, origin)",
           )
           .eq("customer_id", id)
           .order("created_at", { ascending: false })
@@ -215,10 +216,7 @@ export function CustomerProfileDialog({
                   </TableHeader>
                   <TableBody>
                     {(data?.orders ?? []).map((order) => {
-                      const refunded = (order.order_refunds ?? [])
-                        .filter((row) => row.status === "active")
-                        .reduce((sum, row) => sum + Number(row.amount), 0);
-                      const net = Math.max(0, Number(order.total) - refunded);
+                      const net = netInvoiceTotal(order, order.order_refunds);
                       return (
                         <TableRow key={order.id}>
                           <TableCell className="w-24 whitespace-nowrap text-start">

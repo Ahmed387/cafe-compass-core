@@ -8,6 +8,7 @@ import { BackupsPanel } from "@/modules/governance/BackupsPanel";
 import { DangerZonePanel } from "@/modules/governance/DangerZonePanel";
 import { TestShiftResetPanel } from "@/modules/governance/TestShiftResetPanel";
 import { SystemSimulationPanel } from "@/modules/governance/SystemSimulationPanel";
+import { PaymentMethodsCard } from "@/modules/governance/PaymentMethodsCard";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -160,6 +161,7 @@ function SettingsPage() {
       <ScheduleCard readOnly={readOnly} />
       <ShiftPolicyCard readOnly={readOnly} />
       <h2 className="mb-2 mt-8 text-sm font-semibold text-muted-foreground">{lang === "ar" ? "٣. المالية والنسخ الاحتياطي" : "3. Finance & backups"}</h2>
+      <PaymentMethodsCard readOnly={readOnly} />
       <ReserveCard readOnly={readOnly} />
       <BackupsPanel />
       <TestShiftResetPanel />

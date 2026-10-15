@@ -1,3 +1,4 @@
+import { netInvoiceTotal, saleRefundTotal } from "@/core/finance/formulas";
 import { downloadCsv, stampedName } from "@/lib/csv";
 
 type ExportOrder = {
@@ -8,13 +9,10 @@ type ExportOrder = {
   subtotal: number | string;
   total: number | string;
   order_payments?: Array<{ method_key: string; amount: number | string }> | null;
-  order_refunds?: Array<{ amount: number | string; status: string }> | null;
+  order_refunds?: Array<{ amount: number | string; status: string; origin?: string | null }> | null;
 };
 
-const refunded = (o: ExportOrder) =>
-  (o.order_refunds ?? [])
-    .filter((r) => r.status === "active")
-    .reduce((acc, r) => acc + Number(r.amount), 0);
+const refunded = (o: ExportOrder) => saleRefundTotal(o.order_refunds);
 
 /** Downloads the invoice ledger (all filtered rows, not just the visible page). */
 export function exportOrdersCsv(rows: ExportOrder[]) {
@@ -32,7 +30,7 @@ export function exportOrdersCsv(rows: ExportOrder[]) {
       { header: "Subtotal", value: (o) => Number(o.subtotal) },
       { header: "Total", value: (o) => Number(o.total) },
       { header: "Refunded Amount", value: (o) => refunded(o) },
-      { header: "Net Total", value: (o) => Math.max(0, Number(o.total) - refunded(o)) },
+      { header: "Net Total", value: (o) => netInvoiceTotal(o, o.order_refunds) },
       { header: "Final Status", value: (o) => o.status },
     ],
     stampedName("orders-ledger", "csv"),

@@ -25,7 +25,16 @@ type Form = {
 };
 
 /** Full edit of an employee: profile fields, salary, status and roles — all persisted via audited RPCs. */
-export function EmployeeEditDialog({ userId, isSelf }: { userId: string; isSelf: boolean }) {
+export function EmployeeEditDialog({
+  userId,
+  isSelf,
+  showLabel = false,
+}: {
+  userId: string;
+  isSelf: boolean;
+  /** Show the word "Edit" next to the icon (profile header). */
+  showLabel?: boolean;
+}) {
   const { t, lang } = useI18n();
   const ar = lang === "ar";
   const { can, me } = useAuth();
@@ -122,6 +131,7 @@ export function EmployeeEditDialog({ userId, isSelf }: { userId: string; isSelf:
     <>
       <Button size="sm" variant="outline" onClick={() => setOpen(true)} aria-label={ar ? "تعديل" : "Edit"}>
         <Pencil className="size-4" />
+        {showLabel && (ar ? "تعديل البيانات" : "Edit details")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto" dir={ar ? "rtl" : "ltr"}>

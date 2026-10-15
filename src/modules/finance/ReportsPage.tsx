@@ -1,3 +1,4 @@
+import { saleRefundTotal } from "@/core/finance/formulas";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 
@@ -269,7 +270,7 @@ export function ReportsPage() {
         status: string;
       }>;
       order_payments: Array<{ method_key: string; amount: number }>;
-      order_refunds: Array<{ amount: number; status: string }>;
+      order_refunds: Array<{ amount: number; status: string; origin?: string | null }>;
       user_profiles: { display_name: string | null; first_name: string } | null;
     };
     const out: Row[] = [];
@@ -278,7 +279,7 @@ export function ReportsPage() {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "order_number, status, total, subtotal, discount_amount, created_at, order_items(product_name, size_name, quantity, line_total, unit_cost, status), order_payments(method_key, amount), order_refunds(amount, status), user_profiles!orders_created_by_fkey(display_name, first_name)",
+          "order_number, status, total, subtotal, discount_amount, created_at, order_items(product_name, size_name, quantity, line_total, unit_cost, status), order_payments(method_key, amount), order_refunds(amount, status, origin), user_profiles!orders_created_by_fkey(display_name, first_name)",
         )
         .eq("branch_id", currentBranchId!)
         .gte("created_at", fromIso)
@@ -301,9 +302,7 @@ export function ReportsPage() {
       subtotal: Number(o.subtotal),
       discount: Number(o.discount_amount),
       total: Number(o.total),
-      refunded: (o.order_refunds ?? [])
-        .filter((r) => r.status === "active")
-        .reduce((sum, r) => sum + Number(r.amount), 0),
+      refunded: saleRefundTotal(o.order_refunds),
       methods: (o.order_payments ?? []).map((p) => `${p.method_key}:${p.amount}`).join(" | "),
       cashier: o.user_profiles?.display_name || o.user_profiles?.first_name || "",
     }));

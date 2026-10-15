@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -13,8 +13,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
-import { deleteUserDocument, getUserDocuments, uploadUserDocument } from "@/lib/admin.functions";
-import { useAuth } from "@/lib/auth";
+import { deleteCompanyUser, deleteUserDocument, getUserDocuments, uploadUserDocument } from "@/lib/admin.functions";
+import { ROOT_ADMIN_EMAIL, useAuth } from "@/lib/auth";
+import { EmployeeEditDialog } from "@/modules/governance/EmployeeEditDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { fileToPayload } from "@/lib/files";
 import { friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
@@ -34,8 +46,28 @@ export const Route = createFileRoute("/_authenticated/staff/$userId")({
 function StaffDetailPage() {
   const { userId } = Route.useParams();
   const { t, lang } = useI18n();
-  const { can } = useAuth();
+  const { can, me } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const isSuperAdmin = me?.roleNames.includes("Super Admin") ?? false;
+  const removeEmployee = useMutation({
+    mutationFn: () => deleteCompanyUser({ data: { user_id: userId } }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["hr-preview"] });
+      toast.success(
+        res?.mode === "archived"
+          ? lang === "ar"
+            ? "الموظف له سجلات، فاتأرشف واتقفل حسابه وسجلاته محفوظة"
+            : "Employee has history, so they were archived and disabled; records kept"
+          : lang === "ar"
+            ? "تم حذف الموظف"
+            : "Employee deleted",
+      );
+      navigate({ to: "/hr", search: { tab: "team" } });
+    },
+    onError: (e) => toast.error(friendlyError(e, lang)),
+  });
   const [roleIds, setRoleIds] = useState<string[]>([]);
 
   const { data: profile } = useQuery({
@@ -163,12 +195,49 @@ function StaffDetailPage() {
         title={profile.display_name || `${profile.first_name} ${profile.last_name ?? ""}`.trim()}
         description={t("users.details")}
         action={
-          <Button variant="outline" asChild>
-            <Link to="/hr" search={{ tab: "team" }}>
-              <ArrowLeft className="size-4 rtl:rotate-180" />
-              {t("users.back")}
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {can("users.update") && (
+              <EmployeeEditDialog userId={userId} isSelf={userId === me?.profile.id} showLabel />
+            )}
+            {isSuperAdmin &&
+              userId !== me?.profile.id &&
+              (profile.email ?? "").toLowerCase() !== ROOT_ADMIN_EMAIL && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button size="sm" variant="outline" className="border-destructive/40 text-destructive">
+                      <Trash2 className="size-4" />
+                      {lang === "ar" ? "حذف الموظف" : "Delete"}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{t("users.deleteTitle")}</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {lang === "ar"
+                          ? "لو الموظف ليه ورديات أو طلبات أو رواتب، هيتأرشف ويتقفل دخوله مع حفظ كل سجلاته بدل الحذف النهائي."
+                          : "If the employee has shifts, orders or payroll, they are archived and blocked from signing in, with all records kept."}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        disabled={removeEmployee.isPending}
+                        onClick={() => removeEmployee.mutate()}
+                      >
+                        {t("users.delete")}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/hr" search={{ tab: "team" }}>
+                <ArrowLeft className="size-4 rtl:rotate-180" />
+                {t("users.back")}
+              </Link>
+            </Button>
+          </div>
         }
       />
 

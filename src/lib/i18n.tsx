@@ -821,6 +821,10 @@ export const dict: Dict = {
   "orders.cashier": { en: "Cashier", ar: "الكاشير" },
   "orders.unitPrice": { en: "Unit price", ar: "سعر الوحدة" },
   "orders.netCollected": { en: "Net collected", ar: "صافي المحصل" },
+  "orders.removedReturned": {
+    en: "Removed items returned to customer (already out of the total)",
+    ar: "أصناف اتشالت ورجعت فلوسها (مخصومة من الإجمالي بالفعل)",
+  },
   "orders.operationalWaste": { en: "Operational waste", ar: "هالك تشغيلي" },
   "nav.refunds": { en: "Refunds log", ar: "سجل المرتجعات" },
   "refunds.waste": { en: "Waste cost", ar: "تكلفة الهالك" },

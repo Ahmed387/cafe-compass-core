@@ -1,3 +1,4 @@
+import { netInvoiceTotal, saleRefundTotal } from "@/core/finance/formulas";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
@@ -55,7 +56,7 @@ function OrderInvoicePage() {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, order_number, order_type, status, subtotal, discount_amount, discount_reason, tax_amount, total, created_at, completed_at, customer_id, customer_name, customer_phone, notes, shift_id, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, order_item_modifiers(name, price_delta)), order_payments(method_key, amount, reference), order_refunds(id, amount, reason, method_key, created_at, status, items_payload), partner_tab_orders(id, total_amount, is_settled, partners(name))",
+          "id, order_number, order_type, status, subtotal, discount_amount, discount_reason, tax_amount, total, created_at, completed_at, customer_id, customer_name, customer_phone, notes, shift_id, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, order_item_modifiers(name, price_delta)), order_payments(method_key, amount, reference), order_refunds(id, amount, reason, method_key, created_at, status, origin, items_payload), partner_tab_orders(id, total_amount, is_settled, partners(name))",
         )
         .eq("id", orderId)
         .maybeSingle();
@@ -104,8 +105,8 @@ function OrderInvoicePage() {
   const cashierName =
     cashier?.display_name || `${cashier?.first_name ?? ""} ${cashier?.last_name ?? ""}`.trim() || "—";
   const refunds = (row.order_refunds ?? []).filter((refund) => refund.status === "active");
-  const refunded = refunds.reduce((sum, refund) => sum + Number(refund.amount), 0);
-  const net = Math.max(0, Number(row.total) - refunded);
+  const refunded = saleRefundTotal(refunds);
+  const net = netInvoiceTotal(row, refunds);
   type TabRow = { total_amount: number; is_settled: boolean; partners: { name: string } | null };
   const tabRel = row.partner_tab_orders as unknown as TabRow | TabRow[] | null;
   const tab = Array.isArray(tabRel) ? tabRel[0] : tabRel;
