@@ -754,9 +754,8 @@ function OrdersPage() {
                 ))}
               </div>
             </div>
-            <KpiGrid cols={4} title={ar ? "حالة التشغيل" : "Operational status"}>
+            <KpiGrid cols={3} title={ar ? "حالة التشغيل" : "Operational status"}>
               <KpiCard label={ar ? "عدد الأوردرات" : "Orders"} value={kpi?.count ?? 0} formula={ar ? "عدد كل الفواتير المطابقة للفلاتر." : "Count of all invoices matching the filters."} details={orderDetailRows()} />
-              <KpiCard label={ar ? "قيد التسليم" : "Pending delivery"} value={kpi?.pending ?? 0} tone="warn" formula={ar ? "الفواتير التي حالتها قيد التسليم." : "Invoices currently pending delivery."} details={orderDetailRows((order) => order.status === "pending")} />
               <KpiCard label={ar ? "المرتجع" : "Refunded"} value={kpi?.refunded ?? 0} formula={ar ? "الفواتير المرتجعة كليًا أو جزئيًا." : "Fully or partially refunded invoices."} details={orderDetailRows((order) => order.status === "refunded" || order.status === "partially_refunded")} />
               <KpiCard label={ar ? "الملغي" : "Cancelled"} value={kpi?.cancelled ?? 0} tone={(kpi?.cancelled ?? 0) > 0 ? "bad" : undefined} formula={ar ? "الفواتير الملغاة ضمن النطاق." : "Cancelled invoices in the range."} details={orderDetailRows((order) => order.status === "cancelled")} />
             </KpiGrid>
