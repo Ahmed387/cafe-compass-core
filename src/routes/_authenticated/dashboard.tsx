@@ -10,7 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { auditLabels } from "@/lib/audit-labels";
 import { formatDateTime, formatMoney } from "@/lib/format";
-import { businessDayStartIso, monthToDate } from "@/core/finance/business-dates";
+import { addDays, businessDayStartIso, businessToday, monthToDate } from "@/core/finance/business-dates";
 import { useFinancialEngine } from "@/core/hooks/useFinancialEngine";
 import { useI18n } from "@/lib/i18n";
 import { OwnerStatementPanel } from "@/modules/governance/OwnerStatementPanel";
@@ -97,23 +97,28 @@ function DashboardPage() {
     queryKey: ["dashboard-ops", currentBranchId, mtd.start],
     enabled: Boolean(currentBranchId) && Boolean(data),
     queryFn: async () => {
-      const since = new Date(Date.now() - 6 * 86400000);
-      since.setHours(0, 0, 0, 0);
+      // Last 7 business days from the server's sales definition (same numbers as the
+      // profit report: after offers, discounts, cashback and refunds; Cairo days).
+      const today = businessToday();
+      const first = addDays(today, -6);
       const [shifts, week] = await Promise.all([
         supabase.from("shifts").select("id, status, opened_at").eq("branch_id", currentBranchId!).gte("opened_at", businessDayStartIso(mtd.start)).limit(500),
-        supabase.from("orders").select("created_at, subtotal, discount_amount").eq("branch_id", currentBranchId!).neq("status", "cancelled").gte("created_at", since.toISOString()).limit(10000),
+        supabase.rpc("sales_period_summary", { _from: first, _to: today, _branch_id: currentBranchId! }),
       ]);
+      const byDay = new Map(
+        ((week.data as { by_day?: Array<{ day: string; revenue: number; count: number }> } | null)?.by_day ?? []).map(
+          (d) => [d.day, d] as const,
+        ),
+      );
       const days: Array<{ day: string; sales: number; orders: number }> = [];
       for (let i = 0; i < 7; i++) {
-        const d = new Date(since.getTime() + i * 86400000);
-        days.push({ day: d.toLocaleDateString(ar ? "ar-EG" : "en-GB", { weekday: "short" }), sales: 0, orders: 0 });
-      }
-      for (const o of week.data ?? []) {
-        const idx = Math.floor((new Date(o.created_at).getTime() - since.getTime()) / 86400000);
-        if (days[idx]) {
-          days[idx].sales += Number(o.subtotal ?? 0) - Number(o.discount_amount ?? 0);
-          days[idx].orders += 1;
-        }
+        const iso = addDays(first, i);
+        const row = byDay.get(iso);
+        days.push({
+          day: new Date(`${iso}T12:00:00Z`).toLocaleDateString(ar ? "ar-EG" : "en-GB", { weekday: "short", timeZone: "UTC" }),
+          sales: Number(row?.revenue ?? 0),
+          orders: Number(row?.count ?? 0),
+        });
       }
       const rows = shifts.data ?? [];
       return { ids: rows.map((r) => r.id), open: rows.find((r) => r.status === "open") ?? null, days };
