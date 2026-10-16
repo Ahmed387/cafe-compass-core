@@ -372,11 +372,14 @@ function OrdersPage() {
     queryFn: async () => {
       const branchId = currentBranchId;
       if (!branchId) throw new Error("Missing branch");
+      // _order_type picks the full summary; with only (_from, _to, _branch_id) the API
+      // sees two versions with the same parameter names and refuses the call.
       const { data, error } = await supabase.rpc("orders_period_summary", {
         _from: from,
         _to: to,
         _branch_id: branchId,
-        ...(status === "all" ? {} : { _status: status }),
+        _status: status,
+        _order_type: "all",
       });
       if (error) throw error;
       return data as unknown as OrdersSummary;
