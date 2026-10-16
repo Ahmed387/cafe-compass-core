@@ -6,7 +6,6 @@ import {
   IdCard,
   KeyRound,
   NotebookTabs,
-  PackageX,
   ReceiptText,
   ScrollText,
   BarChart3,
@@ -89,7 +88,6 @@ export const HUBS: Hub[] = [
         permission: "inventory.view",
       },
       { to: "/purchases", labelKey: "nav.purchases", icon: Truck, permission: "purchases.view" },
-      { to: "/returns", labelKey: "nav.returns", icon: PackageX, permission: "purchases.view" },
     ],
   },
   {

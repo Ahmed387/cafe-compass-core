@@ -47,6 +47,8 @@ type Customer = {
   cashback_progress: number;
   total_spent: number;
   visits: number;
+  /** Visit stamps toward the next free drink. */
+  points_balance: number | null;
   last_visit_at: string | null;
 };
 
@@ -86,7 +88,7 @@ function CashbackPage() {
     queryFn: async () => {
       let query = supabase
         .from("customers")
-        .select("id, code, name, phone, barcode, wallet_balance, cashback_progress, total_spent, visits, last_visit_at", { count: "exact" })
+        .select("id, code, name, phone, barcode, wallet_balance, cashback_progress, total_spent, visits, points_balance, last_visit_at", { count: "exact" })
         .eq("is_active", true)
         .order("wallet_balance", { ascending: false })
         .order("created_at", { ascending: true })
@@ -134,6 +136,17 @@ function CashbackPage() {
     if (!ok) toast.error(t("orders.printBlocked"));
   };
 
+  const visitCfg = useQuery({
+    queryKey: ["visit-rewards-config", me?.profile.company_id],
+    enabled: Boolean(me?.profile.company_id),
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("visit_rewards_config" as never, { _company: me!.profile.company_id } as never);
+      if (error) throw error;
+      return (data ?? { enabled: false, visits_per_reward: 10 }) as VisitRewardConfig;
+    },
+  });
+  const visitsNeeded = Number(visitCfg.data?.visits_per_reward ?? 10);
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -154,6 +167,7 @@ function CashbackPage() {
       </KpiGrid>
 
       {isSuperAdmin && cfg && <CashbackRuleCard config={cfg} lang={lang} money={money} onSaved={() => qc.invalidateQueries({ queryKey: ["cashback-settings"] })} />}
+      {isSuperAdmin && visitCfg.data && <VisitRewardCard config={visitCfg.data} lang={lang} onSaved={() => qc.invalidateQueries({ queryKey: ["visit-rewards-config"] })} />}
 
       <section className="space-y-3">
         <Input placeholder={ar ? "دوّر بالاسم أو الموبايل أو الكود" : "Search name, phone or code"} value={search}
@@ -169,7 +183,7 @@ function CashbackPage() {
                   <TableHead>{t("common.phone")}</TableHead>
                   <TableHead className="text-end">{ar ? "المحفظة" : "Wallet"}</TableHead>
                   <TableHead className="min-w-40">{ar ? "للمكافأة الجاية" : "To next reward"}</TableHead>
-                  <TableHead className="text-center">{ar ? "زيارات" : "Visits"}</TableHead>
+                  <TableHead className="text-center">{ar ? "للمشروب المجاني" : "Free drink"}</TableHead>
                   <TableHead className="text-end">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -190,7 +204,18 @@ function CashbackPage() {
                           </div>
                         ) : <span className="text-xs text-muted-foreground">—</span>}
                       </TableCell>
-                      <TableCell className="text-center tabular-nums">{row.visits}</TableCell>
+                      <TableCell className="text-center tabular-nums">
+                        {visitCfg.data?.enabled ? (
+                          Number(row.points_balance ?? 0) >= visitsNeeded ? (
+                            <Badge className="bg-success/15 text-success">{ar ? "مستحق" : "Ready"}</Badge>
+                          ) : (
+                            <span>{Number(row.points_balance ?? 0)}/{visitsNeeded}</span>
+                          )
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                        <span className="block text-[10px] text-muted-foreground">{ar ? `${row.visits} زيارة كلها` : `${row.visits} visits total`}</span>
+                      </TableCell>
                       <TableCell className="space-x-2 whitespace-nowrap text-end">
                         <Button size="sm" variant="secondary" onClick={() => setHistoryFor(row)}>{ar ? "الحركات" : "History"}</Button>
                         <Button size="sm" variant="outline" onClick={() => printCard(row)}>{ar ? "اطبع الكارت" : "Print card"}</Button>
@@ -262,6 +287,45 @@ function CashbackRuleCard({ config, lang, money, onSaved }: {
           ? ar ? `يعني كاش باك ${((r / t) * 100).toFixed(1)}٪ من المشتريات. مثال: عميل صرف ${money(t * 2.5)} ← ياخد ${money(r * 2)} والباقي ${money(t / 2)} بيتراكم للمرة الجاية.`
                : `That's ${((r / t) * 100).toFixed(1)}% back. E.g. spending ${money(t * 2.5)} → ${money(r * 2)} in the wallet, ${money(t / 2)} carries over.`
           : ar ? "المكافأة لازم تكون أقل من مبلغ الهدف." : "The reward must be smaller than the target."}
+      </p>
+    </section>
+  );
+}
+
+type VisitRewardConfig = { enabled: boolean; visits_per_reward: number };
+
+function VisitRewardCard({ config, lang, onSaved }: { config: VisitRewardConfig; lang: "ar" | "en"; onSaved: () => void }) {
+  const ar = lang === "ar";
+  const [enabled, setEnabled] = useState(config.enabled);
+  const [visits, setVisits] = useState(String(config.visits_per_reward));
+  useEffect(() => { setEnabled(config.enabled); setVisits(String(config.visits_per_reward)); }, [config]);
+  const save = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc("set_visit_rewards" as never, { _enabled: enabled, _visits_per_reward: Number(visits) } as never);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success(ar ? "اتحفظت مكافأة الزيارات" : "Visit reward saved"); onSaved(); },
+    onError: (e) => toast.error(friendlyError(e, lang)),
+  });
+  const n = Number(visits);
+  const valid = Number.isInteger(n) && n >= 2 && n <= 100;
+  return (
+    <section className="card-surface rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <SectionTitle icon={Gift}>{ar ? "مكافأة الزيارات" : "Visit reward"}</SectionTitle>
+        <label className="flex items-center gap-2 text-sm">{ar ? "مفعّل" : "Enabled"}<Switch checked={enabled} onCheckedChange={setEnabled} /></label>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <div className="space-y-1">
+          <Label htmlFor="vr-visits">{ar ? "كل كام زيارة = مشروب مجاني" : "Visits per free drink"}</Label>
+          <Input id="vr-visits" inputMode="numeric" value={visits} onChange={(e) => setVisits(e.target.value)} />
+        </div>
+        <Button disabled={!valid || save.isPending} onClick={() => save.mutate()}><Save className="me-1 size-4" />{ar ? "احفظ" : "Save"}</Button>
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        {ar
+          ? "الزيارة بتتحسب مرة واحدة في اليوم مهما العميل طلب. لما يكمّل العدد، الكاشير بيشوف «اجعله مجاني» جنب المشروبات ويختار واحد. الكاش باك شغال عادي جنبها."
+          : "A visit counts once a day however many orders. When reached, the cashier sees “Make it free” on drinks and picks one. Cashback keeps working alongside."}
       </p>
     </section>
   );

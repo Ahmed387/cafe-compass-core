@@ -195,7 +195,11 @@ function PosPage() {
     phone: string | null;
     wallet_balance: number;
     cashback_progress: number;
+    /** Visit stamps toward the next free drink. */
+    points_balance?: number | null;
   } | null>(null);
+  /** Cart line the customer gets free with their visit reward (one unit). */
+  const [rewardLineKey, setRewardLineKey] = useState<string | null>(null);
   const [configProduct, setConfigProduct] = useState<ProductRow | null>(null);
   const [configSize, setConfigSize] = useState<string>("");
   const [configMods, setConfigMods] = useState<Record<string, CartModifier>>({});
@@ -695,10 +699,13 @@ function PosPage() {
     const rawManual = Math.max(Number(discount) || 0, 0);
     const manualDiscount = Math.round(Math.min(discountMode === "percent" ? (subtotal * Math.min(rawManual, 100)) / 100 : rawManual, subtotal) * 100) / 100;
     const discountValue = Math.min(Math.max(manualDiscount, 0), subtotal);
+    // Visit reward: one unit of the chosen line is free (add-ons stay paid).
+    const rewardLine = rewardLineKey ? cart.find((l) => l.key === rewardLineKey && !l.custom && !l.bundle_key) : undefined;
+    const rewardValue = rewardLine ? Math.min(Number(rewardLine.unit_price), Math.max(subtotal - discountValue, 0)) : 0;
     const tax = 0;
-    const total = Math.round((subtotal - discountValue) * 100) / 100;
-    return { subtotal, discountValue, manualDiscount, offersDiscount, doubleValue, tax, total };
-  }, [cart, discount, discountMode]);
+    const total = Math.round((subtotal - discountValue - rewardValue) * 100) / 100;
+    return { subtotal, discountValue, manualDiscount, rewardValue, offersDiscount, doubleValue, tax, total };
+  }, [cart, discount, discountMode, rewardLineKey]);
 
   const cashLine = payRows.find((row) => row.methodKey === "cash") ?? null;
   const cashDue = Number(cashLine?.amount) || 0;
@@ -706,6 +713,7 @@ function PosPage() {
 
   function resetOrder() {
     setCart([]);
+    setRewardLineKey(null);
     setDiscount("");
     setDiscountReason("");
       setOrderNote("");
@@ -1042,6 +1050,20 @@ function PosPage() {
 
   // Split payments. A "cashback" line pays from the linked customer's wallet.
   const walletBalance = Number(customer?.wallet_balance ?? 0);
+  const visitRewards = useQuery({
+    queryKey: ["visit-rewards-config", me?.profile.company_id],
+    enabled: Boolean(me?.profile.company_id),
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("visit_rewards_config" as never, { _company: me!.profile.company_id } as never);
+      if (error) throw error;
+      return (data ?? {}) as { enabled?: boolean; visits_per_reward?: number };
+    },
+  });
+  const visitRewardsOn = visitRewards.data?.enabled === true;
+  const visitsNeeded = Number(visitRewards.data?.visits_per_reward ?? 10);
+  const visitStamps = Number(customer?.points_balance ?? 0);
+  const rewardEligible = visitRewardsOn && Boolean(customer) && visitStamps >= visitsNeeded && partnerMode !== "tab";
   const rowAmount = (row: PayRow) => Number(row.amount) || 0;
   const paidSum = Math.round(payRows.reduce((sum, row) => sum + rowAmount(row), 0) * 100) / 100;
   const cashbackUsed = Math.round(
@@ -1086,7 +1108,7 @@ function PosPage() {
       const term = searchTerm;
       const { data, error } = await supabase
         .from("customers")
-        .select("id, code, name, phone, wallet_balance, cashback_progress")
+        .select("id, code, name, phone, wallet_balance, cashback_progress, points_balance")
         .eq("is_active", true)
         .or(
           `phone.ilike.%${term}%,code.ilike.%${term}%,barcode.ilike.%${term}%,name.ilike.%${term}%`,
@@ -1105,8 +1127,10 @@ function PosPage() {
     phone: string | null;
     wallet_balance: number;
     cashback_progress: number;
+    points_balance?: number | null;
   }) => {
     setCustomer(row);
+    setRewardLineKey(null);
     setCustomerName(row.name);
     setCustomerPhone(row.phone ?? "");
     setCustomerQuery("");
@@ -1123,7 +1147,7 @@ function PosPage() {
       if (error) throw error;
       const { data, error: readError } = await supabase
         .from("customers")
-        .select("id, code, name, phone, wallet_balance, cashback_progress")
+        .select("id, code, name, phone, wallet_balance, cashback_progress, points_balance")
         .eq("id", newId as unknown as string)
         .maybeSingle();
       if (readError) throw readError;
@@ -1185,6 +1209,7 @@ function PosPage() {
           offer_id: line.offer_id ?? null,
           bundle_key: line.bundle_key ?? null,
           modifiers: line.modifiers,
+          ...(line.key === rewardLineKey ? { free_reward: true } : {}),
         })),
         _payments: onPartnerTab ? [] : payments,
         _order_type: orderType,
@@ -1852,7 +1877,9 @@ function PosPage() {
                     <span className="min-w-0 truncate font-medium">
                       {lang === "ar" ? "العميل" : "Customer"}: {customer?.name || customerName}
                       {customer
-                        ? ` (${lang === "ar" ? "كاش باك" : "Cashback"}: ${formatMoney(walletBalance, currency, lang)})`
+                        ? ` (${lang === "ar" ? "كاش باك" : "Cashback"}: ${formatMoney(walletBalance, currency, lang)}${
+                            visitRewardsOn ? ` · ${lang === "ar" ? "زيارات" : "Visits"}: ${visitStamps}/${visitsNeeded}` : ""
+                          })`
                         : ""}
                     </span>
                     <Button
@@ -1861,6 +1888,7 @@ function PosPage() {
                       className="size-7 shrink-0"
                       onClick={() => {
                         setCustomer(null);
+                        setRewardLineKey(null);
                         setCustomerName("");
                         setCustomerPhone("");
                       }}
@@ -2066,6 +2094,21 @@ function PosPage() {
                               + {lang === "ar" ? "إضافات" : "Extras"}
                             </button>
                           )}
+                          {rewardEligible && !line.bundle_key && !line.custom && (
+                            <button
+                              type="button"
+                              onClick={() => setRewardLineKey((k) => (k === line.key ? null : line.key))}
+                              className={`ms-2 mt-0.5 rounded px-1 text-[10px] font-bold ${
+                                rewardLineKey === line.key
+                                  ? "bg-success/15 text-success"
+                                  : "text-success hover:underline"
+                              }`}
+                            >
+                              {rewardLineKey === line.key
+                                ? lang === "ar" ? "مجاني ✓ (إلغاء)" : "Free ✓ (undo)"
+                                : lang === "ar" ? "اجعله مجاني" : "Make it free"}
+                            </button>
+                          )}
                           {line.original_price != null && (
                             <p className="truncate text-[10px] leading-none text-accent-foreground">
                               <span className="line-through tabular-nums">
@@ -2236,6 +2279,16 @@ function PosPage() {
               </div>
 
               <div className="z-10 mt-auto shrink-0 space-y-2 border-t bg-card p-3">
+                {rewardEligible && cart.length > 0 && (
+                  <div className="flex items-center justify-between rounded-md bg-success/10 px-2 py-1 text-xs font-medium text-success">
+                    <span>
+                      {rewardLineKey
+                        ? lang === "ar" ? "مشروب مجاني (مكافأة زيارات)" : "Free drink (visit reward)"
+                        : lang === "ar" ? `العميل كمّل ${visitsNeeded} زيارات: اختار مشروب مجاني` : `${visitsNeeded} visits reached: pick a free drink`}
+                    </span>
+                    {rewardLineKey && <span className="tabular-nums">-{formatMoney(totals.rewardValue, currency, lang)}</span>}
+                  </div>
+                )}
                 {cashbackOn && customer && cart.length > 0 && (
                   <div className="flex items-center justify-between rounded-md bg-secondary/60 px-2 py-1 text-xs font-medium">
                     <span>
