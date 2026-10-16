@@ -129,11 +129,12 @@ export function OrderDetailsDialog({
   const netTotal = order ? netInvoiceTotal(order, refunds.data) : 0;
   const refundable = order?.status === "cancelled" ? 0 : netTotal;
 
-  // Cashiers return orders of their own still-open shift without a manager
-  // (same rule as the server's can_refund_order).
-  const ownOpenShift = useQuery({
+  // Refunds, line removals and cancellations only while the invoice's own shift
+  // is open (server rule _assert_order_shift_open). Cashiers may return orders of
+  // their own open shift without a manager (server rule can_refund_order).
+  const orderShift = useQuery({
     queryKey: ["order-shift-open", order?.shift_id, me?.profile.id],
-    enabled: Boolean(order?.shift_id && me?.profile.id) && !can("pos.process_refund"),
+    enabled: Boolean(order?.shift_id && me?.profile.id),
     queryFn: async () => {
       const { data: shift, error } = await supabase
         .from("shifts")
@@ -141,18 +142,20 @@ export function OrderDetailsDialog({
         .eq("id", order!.shift_id!)
         .maybeSingle();
       if (error) throw error;
-      if (!shift || shift.status !== "open") return false;
-      if (shift.user_id === me!.profile.id) return true;
+      if (!shift || shift.status !== "open") return { open: false, mine: false };
+      if (shift.user_id === me!.profile.id) return { open: true, mine: true };
       const { data: crew } = await supabase
         .from("shift_staff")
         .select("staff_id")
         .eq("shift_id", shift.id)
         .eq("staff_id", me!.profile.id);
-      return (crew ?? []).length > 0;
+      return { open: true, mine: (crew ?? []).length > 0 };
     },
   });
+  const shiftClosed = orderShift.data?.open === false;
   const canRefund =
-    can("pos.process_refund") || (can("pos.create_order") && ownOpenShift.data === true);
+    orderShift.data?.open === true &&
+    (can("pos.process_refund") || (can("pos.create_order") && orderShift.data.mine));
 
   const invalidate = async () => {
     await Promise.all([
@@ -313,6 +316,7 @@ export function OrderDetailsDialog({
                     <div className="flex shrink-0 items-center gap-2 whitespace-nowrap font-mono">
                       <span className="font-semibold">{formatMoney(item.line_total, currency, lang)}</span>
                       {item.status === "active" &&
+                        !shiftClosed &&
                         (order.status === "open" || order.status === "pending") &&
                         (can("pos.create_order") || can("pos.void_item")) && (
                           <Button
@@ -325,6 +329,7 @@ export function OrderDetailsDialog({
                           </Button>
                         )}
                       {item.status === "active" &&
+                        !shiftClosed &&
                         order.status === "completed" &&
                         can("pos.void_item") && (
                           <Button
@@ -415,6 +420,13 @@ export function OrderDetailsDialog({
             </div>
           )}
 
+          {shiftClosed && order?.status !== "cancelled" && (
+            <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              {lang === "ar"
+                ? "الوردية بتاعة الفاتورة دي اتقفلت، فالمرتجع وشيل الأصناف والإلغاء مش متاحين."
+                : "This invoice's shift is closed: returns, line removals and cancellation are no longer available."}
+            </p>
+          )}
           <DialogFooter className="gap-2">
             {can("pos.reprint_receipt") && (
               <Button variant="outline" onClick={print}>

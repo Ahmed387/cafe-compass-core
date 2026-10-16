@@ -44,6 +44,7 @@ import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/com
 
 import { supabase } from "@/integrations/supabase/client";
 import { CollapsibleSection, KpiCard, KpiGrid } from "@/components/shared/KpiCard";
+import { RefundBearerList, useRefundsToDecide } from "@/components/pos/RefundBearerList";
 import { useFinancialEngine } from "@/core/hooks/useFinancialEngine";
 import { useAuth } from "@/lib/auth";
 import { formatMoney, friendlyError } from "@/lib/format";
@@ -371,6 +372,9 @@ function PosPage() {
       return { total, cash, waste, count: rows.length };
     },
   });
+
+  // Refunds still waiting for the manager to say who bears them (blocks closing).
+  const refundsToDecide = useRefundsToDecide(shift.data?.id, closeOpen);
 
   const categories = useQuery({
     queryKey: ["pos-categories"],
@@ -2815,6 +2819,16 @@ function PosPage() {
             {shift.data?.id && (
               <ShiftPaymentBreakdown branchId={currentBranchId} shiftId={shift.data.id} currency={currency} lang={lang === "ar" ? "ar" : "en"} />
             )}
+            {shift.data?.id && (refundsToDecide.data?.length ?? 0) > 0 && (
+              <RefundBearerList
+                shiftId={shift.data.id}
+                refunds={refundsToDecide.data ?? []}
+                staff={staffCandidates.data ?? []}
+                canDecide={can("shifts.close")}
+                currency={currency}
+                lang={lang === "ar" ? "ar" : "en"}
+              />
+            )}
             {shiftRefunds.data && shiftRefunds.data.count > 0 && (
               <CollapsibleSection
                 title={lang === "ar" ? "مرتجعات وهالك الوردية" : "Shift refunds & waste"}
@@ -3051,6 +3065,7 @@ function PosPage() {
             <Button
               disabled={
                 closeShift.isPending ||
+                (refundsToDecide.data?.length ?? 0) > 0 ||
                 closingCash === "" ||
                 retainedFloat === "" ||
                 (closeShortage > 0 &&
