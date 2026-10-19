@@ -280,9 +280,23 @@ function PosPage() {
         .eq("branch_id", currentBranchId!)
         .eq("user_id", me!.profile.id)
         .eq("status", "open")
+        .order("opened_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      if (data) return data;
+      // Cashier added to the shift crew (not the opener) still works and closes that shift.
+      const { data: staffed, error: staffErr } = await supabase
+        .from("shift_staff")
+        .select("shifts!inner(id, opening_cash, opened_at, branch_id, status)")
+        .eq("staff_id", me!.profile.id)
+        .eq("shifts.branch_id", currentBranchId!)
+        .eq("shifts.status", "open")
+        .limit(1)
+        .maybeSingle();
+      if (staffErr) return null;
+      const s = (staffed as { shifts?: unknown } | null)?.shifts;
+      return (Array.isArray(s) ? s[0] : s) as typeof data ?? null;
     },
   });
 
