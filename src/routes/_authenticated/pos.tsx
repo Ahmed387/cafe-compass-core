@@ -280,9 +280,23 @@ function PosPage() {
         .eq("branch_id", currentBranchId!)
         .eq("user_id", me!.profile.id)
         .eq("status", "open")
+        .order("opened_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      if (data) return data;
+      // Cashier added to the shift crew (not the opener) still works and closes that shift.
+      const { data: staffed, error: staffErr } = await supabase
+        .from("shift_staff")
+        .select("shifts!inner(id, opening_cash, opened_at, branch_id, status)")
+        .eq("staff_id", me!.profile.id)
+        .eq("shifts.branch_id", currentBranchId!)
+        .eq("shifts.status", "open")
+        .limit(1)
+        .maybeSingle();
+      if (staffErr) return null;
+      const s = (staffed as { shifts?: unknown } | null)?.shifts;
+      return (Array.isArray(s) ? s[0] : s) as typeof data ?? null;
     },
   });
 
@@ -426,18 +440,25 @@ function PosPage() {
   });
   const extrasLine = cart.find((l) => l.key === extrasLineKey) ?? null;
   function toggleLineExtra(mod: CartModifier) {
-    setCart((prev) =>
-      prev.map((l) =>
-        l.key !== extrasLineKey
-          ? l
-          : {
-              ...l,
-              modifiers: l.modifiers.some((m) => m.option_id === mod.option_id)
-                ? l.modifiers.filter((m) => m.option_id !== mod.option_id)
-                : [...l.modifiers, mod],
-            },
-      ),
-    );
+    const target = cart.find((l) => l.key === extrasLineKey);
+    if (!target) return;
+    const nextMods = target.modifiers.some((m) => m.option_id === mod.option_id)
+      ? target.modifiers.filter((m) => m.option_id !== mod.option_id)
+      : [...target.modifiers, mod];
+    // A line with several units: the extra goes on ONE unit only — split it into its own line.
+    if (target.quantity > 1) {
+      const newKey = `${target.key}-x${Date.now()}`;
+      setCart((prev) =>
+        prev.flatMap((l) =>
+          l.key !== target.key
+            ? [l]
+            : [{ ...l, quantity: l.quantity - 1 }, { ...l, key: newKey, quantity: 1, modifiers: nextMods }],
+        ),
+      );
+      setExtrasLineKey(newKey);
+      return;
+    }
+    setCart((prev) => prev.map((l) => (l.key !== target.key ? l : { ...l, modifiers: nextMods })));
   }
 
   const productImages = useProductImageUrls(

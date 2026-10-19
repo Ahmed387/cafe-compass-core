@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.15"
   }
   public: {
     Tables: {
@@ -888,7 +888,29 @@ export type Database = {
           kind?: string
           order_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "customer_wallet_transactions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_wallet_transactions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_wallet_transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       customers: {
         Row: {
@@ -1005,7 +1027,29 @@ export type Database = {
           reversal_of?: string | null
           status?: Database["public"]["Enums"]["record_status"]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "development_fund_ledger_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "development_fund_ledger_distribution_id_fkey"
+            columns: ["distribution_id"]
+            isOneToOne: false
+            referencedRelation: "profit_distributions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "development_fund_ledger_reversal_of_fkey"
+            columns: ["reversal_of"]
+            isOneToOne: false
+            referencedRelation: "development_fund_ledger"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       electronic_payment_settlements: {
         Row: {
@@ -1371,8 +1415,8 @@ export type Database = {
           id: string
           is_active: boolean
           min_qty: number
-          name_ar: string | null
           name: string
+          name_ar: string | null
           sku: string | null
           unit: string
           updated_at: string
@@ -1387,8 +1431,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           min_qty?: number
-          name_ar?: string | null
           name: string
+          name_ar?: string | null
           sku?: string | null
           unit?: string
           updated_at?: string
@@ -1403,8 +1447,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           min_qty?: number
-          name_ar?: string | null
           name?: string
+          name_ar?: string | null
           sku?: string | null
           unit?: string
           updated_at?: string
@@ -2222,7 +2266,50 @@ export type Database = {
           partner_id?: string
           status?: Database["public"]["Enums"]["record_status"]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "partner_advance_settlements_advance_id_fkey"
+            columns: ["advance_id"]
+            isOneToOne: false
+            referencedRelation: "partner_advances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_advance_settlements_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_advance_settlements_distribution_id_fkey"
+            columns: ["distribution_id"]
+            isOneToOne: false
+            referencedRelation: "profit_distributions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_advance_settlements_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partner_balances"
+            referencedColumns: ["partner_id"]
+          },
+          {
+            foreignKeyName: "partner_advance_settlements_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partner_ownership"
+            referencedColumns: ["partner_id"]
+          },
+          {
+            foreignKeyName: "partner_advance_settlements_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       partner_advances: {
         Row: {
@@ -2267,7 +2354,36 @@ export type Database = {
           reason?: string | null
           status?: Database["public"]["Enums"]["record_status"]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "partner_advances_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_advances_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partner_balances"
+            referencedColumns: ["partner_id"]
+          },
+          {
+            foreignKeyName: "partner_advances_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partner_ownership"
+            referencedColumns: ["partner_id"]
+          },
+          {
+            foreignKeyName: "partner_advances_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       partner_capital_contributions: {
         Row: {
@@ -2833,7 +2949,50 @@ export type Database = {
           status?: Database["public"]["Enums"]["record_status"]
           tab_order_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "partner_tab_settlements_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_tab_settlements_distribution_id_fkey"
+            columns: ["distribution_id"]
+            isOneToOne: false
+            referencedRelation: "profit_distributions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_tab_settlements_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partner_balances"
+            referencedColumns: ["partner_id"]
+          },
+          {
+            foreignKeyName: "partner_tab_settlements_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partner_ownership"
+            referencedColumns: ["partner_id"]
+          },
+          {
+            foreignKeyName: "partner_tab_settlements_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_tab_settlements_tab_order_id_fkey"
+            columns: ["tab_order_id"]
+            isOneToOne: false
+            referencedRelation: "partner_tab_orders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       partner_withdrawal_requests: {
         Row: {
@@ -3119,7 +3278,22 @@ export type Database = {
           source_id?: string
           source_type?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "payroll_deductions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payroll_deductions_salary_payment_id_fkey"
+            columns: ["salary_payment_id"]
+            isOneToOne: false
+            referencedRelation: "salary_payments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       period_partner_shares: {
         Row: {
@@ -4734,8 +4908,8 @@ export type Database = {
           reason: string
           shift_id: string | null
           source: string | null
-          stock_movement_id: string | null
           staff_id: string
+          stock_movement_id: string | null
         }
         Insert: {
           amount: number
@@ -4750,8 +4924,8 @@ export type Database = {
           reason: string
           shift_id?: string | null
           source?: string | null
-          stock_movement_id?: string | null
           staff_id: string
+          stock_movement_id?: string | null
         }
         Update: {
           amount?: number
@@ -4766,8 +4940,8 @@ export type Database = {
           reason?: string
           shift_id?: string | null
           source?: string | null
-          stock_movement_id?: string | null
           staff_id?: string
+          stock_movement_id?: string | null
         }
         Relationships: [
           {
@@ -4810,6 +4984,13 @@ export type Database = {
             columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_penalties_stock_movement_id_fkey"
+            columns: ["stock_movement_id"]
+            isOneToOne: false
+            referencedRelation: "stock_movements"
             referencedColumns: ["id"]
           },
         ]
@@ -4896,6 +5077,13 @@ export type Database = {
             columns: ["item_id"]
             isOneToOne: false
             referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movements_waste_staff_id_fkey"
+            columns: ["waste_staff_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -5541,6 +5729,18 @@ export type Database = {
           name: string | null
           partner_id: string | null
         }
+        Insert: {
+          balance?: never
+          company_id?: string | null
+          name?: string | null
+          partner_id?: string | null
+        }
+        Update: {
+          balance?: never
+          company_id?: string | null
+          name?: string | null
+          partner_id?: string | null
+        }
         Relationships: [
           {
             foreignKeyName: "partners_company_id_fkey"
@@ -5571,8 +5771,149 @@ export type Database = {
       }
     }
     Functions: {
+      _assert_can_close_shift: {
+        Args: { _shift_id: string }
+        Returns: undefined
+      }
+      _attribute_shift_shortage: {
+        Args: {
+          _actor: string
+          _mode: string
+          _reason: string
+          _s: Database["public"]["Tables"]["shifts"]["Row"]
+          _short: number
+          _staff_id: string
+        }
+        Returns: string
+      }
+      _cashback_accrue: {
+        Args: {
+          _actor: string
+          _company: string
+          _customer: string
+          _order: string
+          _order_number: string
+          _spend: number
+        }
+        Returns: number
+      }
+      _charge_staff: {
+        Args: {
+          _amount: number
+          _bearer: string
+          _company: string
+          _order_id: string
+          _reason: string
+          _shift_id: string
+          _source: string
+          _staff_id: string
+        }
+        Returns: number
+      }
+      _charge_waste: {
+        Args: { _mv: string; _staff: string[] }
+        Returns: number
+      }
+      _check_waste_bearer: {
+        Args: { _bearer: string; _staff_id: string }
+        Returns: undefined
+      }
+      _finalize_shift_close: {
+        Args: {
+          _actor: string
+          _counted: number
+          _mode: string
+          _notes: string
+          _retained: number
+          _shift_id: string
+          _source: string
+          _staff_id: string
+        }
+        Returns: Json
+      }
+      _management_salary: {
+        Args: { _company: string; _from: string; _pnl: Json; _to: string }
+        Returns: {
+          amount: number
+          base_net_profit: number
+          partner_id: string
+          partner_name: string
+          pct: number
+          user_id: string
+        }[]
+      }
+      _on_open_order_shift: {
+        Args: { _o: Database["public"]["Tables"]["orders"]["Row"] }
+        Returns: boolean
+      }
+      _order_line_to_waste: {
+        Args: {
+          _bearer: string
+          _order_item_id: string
+          _qty: number
+          _reason: string
+          _staff_id: string
+        }
+        Returns: number
+      }
+      _payout_calc: {
+        Args: { _company: string; _from: string; _fund: number; _to: string }
+        Returns: Json
+      }
+      _payroll_lines: {
+        Args: { _company: string; _end: string; _start: string }
+        Returns: {
+          absence_deduction: number
+          absent_days: number
+          advances: number
+          advances_due: number
+          already_generated: boolean
+          base_salary: number
+          bonuses: number
+          carried_forward: number
+          deduction_days: number
+          employee_name: string
+          hire_date: string
+          job_title: string
+          net_pay: number
+          penalties: number
+          penalties_due: number
+          prorated_salary: number
+          shifts_count: number
+          user_id: string
+          worked_days: number
+          worked_hours: number
+        }[]
+      }
+      _post_shift_electronic: {
+        Args: {
+          _day: string
+          _s: Database["public"]["Tables"]["shifts"]["Row"]
+        }
+        Returns: number
+      }
       _prorated_salary: {
         Args: { _base: number; _end: string; _hire: string; _start: string }
+        Returns: number
+      }
+      _range_pnl: {
+        Args: { _company: string; _from: string; _to: string }
+        Returns: Json
+      }
+      _shift_figures: {
+        Args: { _s: Database["public"]["Tables"]["shifts"]["Row"] }
+        Returns: Json
+      }
+      _wallet_post: {
+        Args: {
+          _actor: string
+          _amount: number
+          _company: string
+          _customer: string
+          _description: string
+          _kind: string
+          _order: string
+        }
         Returns: number
       }
       add_staff_bonus: {
@@ -5584,7 +5925,10 @@ export type Database = {
         }
         Returns: string
       }
-      adjust_customer_wallet: { Args: { _amount: number; _customer_id: string; _reason: string }; Returns: number }
+      adjust_customer_wallet: {
+        Args: { _amount: number; _customer_id: string; _reason: string }
+        Returns: number
+      }
       admin_update_employee: {
         Args: {
           _base_salary: number
@@ -5599,6 +5943,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      advance_outstanding: {
+        Args: { _a: Database["public"]["Tables"]["employee_advances"]["Row"] }
+        Returns: number
+      }
       apply_stock_movement: {
         Args: {
           _branch_id: string
@@ -5611,6 +5959,15 @@ export type Database = {
           _unit_cost?: number
         }
         Returns: string
+      }
+      apply_weighted_cost: {
+        Args: {
+          _branch_id: string
+          _item_id: string
+          _qty: number
+          _unit_cost: number
+        }
+        Returns: number
       }
       approve_expense: { Args: { _expense_id: string }; Returns: string }
       assert_period_open: {
@@ -5650,14 +6007,29 @@ export type Database = {
         Args: { _branch_id?: string; _items: Json }
         Returns: Json
       }
+      business_date: {
+        Args: { _company?: string; _ts: string }
+        Returns: string
+      }
+      business_day_start: {
+        Args: { _company?: string; _day: string }
+        Returns: string
+      }
       business_today: { Args: { _company?: string }; Returns: string }
       can_absorb_shortage: { Args: never; Returns: boolean }
       can_access_branch: { Args: { _branch_id: string }; Returns: boolean }
+      can_refund_order: {
+        Args: { _o: Database["public"]["Tables"]["orders"]["Row"] }
+        Returns: boolean
+      }
       cancel_advance: {
         Args: { _advance_id: string; _reason: string }
         Returns: string
       }
-      cancel_partner_advance: { Args: { _advance_id: string; _reason: string }; Returns: string }
+      cancel_partner_advance: {
+        Args: { _advance_id: string; _reason: string }
+        Returns: string
+      }
       cancel_pos_order: {
         Args: {
           _bearer?: string
@@ -5677,6 +6049,7 @@ export type Database = {
         Args: { _account_id?: string; _from: string; _to: string }
         Returns: Json
       }
+      cashback_config: { Args: { _company: string }; Returns: Json }
       cashback_settings: { Args: never; Returns: Json }
       cashier_can_see_shift: { Args: { _shift_id: string }; Returns: boolean }
       check_order_stock: {
@@ -5704,12 +6077,19 @@ export type Database = {
         Args: { _company_id?: string }
         Returns: Json
       }
+      company_tz: { Args: { _company?: string }; Returns: string }
       correct_expense_amount: {
         Args: { _expense_id: string; _new_amount: number; _reason: string }
         Returns: string
       }
       create_advance: {
-        Args: { _advance_date?: string; _amount: number; _deduct_month?: string; _reason?: string; _user_id: string }
+        Args: {
+          _advance_date?: string
+          _amount: number
+          _deduct_month?: string
+          _reason?: string
+          _user_id: string
+        }
         Returns: string
       }
       create_expense_entry: {
@@ -5854,12 +6234,6 @@ export type Database = {
         Returns: string
       }
       delete_user_document: { Args: { _doc_id: string }; Returns: string }
-      distribute_period_profit:
-        | { Args: { _period_id: string }; Returns: string }
-        | {
-            Args: { _development_fund_amount: number; _period_id: string }
-            Returns: string
-          }
       development_fund_balance: { Args: never; Returns: number }
       edit_stock_movement: {
         Args: {
@@ -5874,12 +6248,16 @@ export type Database = {
         Args: { _branch_id: string; _items: Json; _notes?: string }
         Returns: string
       }
-      execute_operational_reset: {
-        Args: { p_confirm?: string; p_targets?: string[] }
-        Returns: Json
-      }
+      execute_operational_reset:
+        | { Args: { p_confirm?: string }; Returns: Json }
+        | { Args: { p_confirm?: string; p_targets?: string[] }; Returns: Json }
       execute_payout: {
-        Args: { _development_fund?: number; _from: string; _notes?: string; _to: string }
+        Args: {
+          _development_fund?: number
+          _from: string
+          _notes?: string
+          _to: string
+        }
         Returns: string
       }
       execute_salary_payment: {
@@ -5962,6 +6340,14 @@ export type Database = {
       is_root_admin: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
       last_retained_float: { Args: { _branch_id: string }; Returns: number }
+      line_cogs: {
+        Args: { _oi: Database["public"]["Tables"]["order_items"]["Row"] }
+        Returns: number
+      }
+      line_raw_cost: {
+        Args: { _oi: Database["public"]["Tables"]["order_items"]["Row"] }
+        Returns: number
+      }
       link_partner_account: {
         Args: { _email: string; _partner_id: string }
         Returns: string
@@ -5996,7 +6382,10 @@ export type Database = {
         Returns: Json
       }
       my_owner_statement: { Args: never; Returns: Json }
-      my_partner_dashboard: { Args: { _from: string; _to: string }; Returns: Json }
+      my_partner_dashboard: {
+        Args: { _from: string; _to: string }
+        Returns: Json
+      }
       offer_candidates: {
         Args: { _from?: string; _to?: string }
         Returns: {
@@ -6051,6 +6440,10 @@ export type Database = {
         Returns: string
       }
       operating_reserve_settings: { Args: never; Returns: Json }
+      order_item_unit_cogs: {
+        Args: { _order_item_id: string }
+        Returns: number
+      }
       orders_period_summary:
         | {
             Args: {
@@ -6091,16 +6484,30 @@ export type Database = {
       }
       payout_history: { Args: { _limit?: number }; Returns: Json }
       payout_partner_combined: {
-        Args: { _distribution_id: string; _method?: string; _partner_id: string; _salary_payment_id: string }
+        Args: {
+          _distribution_id: string
+          _method?: string
+          _partner_id: string
+          _salary_payment_id: string
+        }
         Returns: undefined
       }
       payout_partner_dividend: {
-        Args: { _account_id?: string; _distribution_id: string; _method?: string; _partner_id: string }
+        Args: {
+          _account_id?: string
+          _distribution_id: string
+          _method?: string
+          _partner_id: string
+        }
         Returns: string
       }
       payout_preview: {
         Args: { _development_fund?: number; _from: string; _to: string }
         Returns: Json
+      }
+      penalty_outstanding: {
+        Args: { _p: Database["public"]["Tables"]["staff_penalties"]["Row"] }
+        Returns: number
       }
       pos_partners: {
         Args: never
@@ -6199,7 +6606,13 @@ export type Database = {
         Returns: string
       }
       record_partner_advance: {
-        Args: { _advance_date?: string; _amount: number; _method?: string; _partner_id: string; _reason?: string }
+        Args: {
+          _advance_date?: string
+          _amount: number
+          _method?: string
+          _partner_id: string
+          _reason?: string
+        }
         Returns: string
       }
       record_purchase_payment: {
@@ -6209,6 +6622,17 @@ export type Database = {
           _notes?: string
           _paid_at?: string
           _purchase_id: string
+        }
+        Returns: string
+      }
+      record_stock_movement: {
+        Args: {
+          _branch_id: string
+          _item_id: string
+          _qty: number
+          _reason?: string
+          _type: Database["public"]["Enums"]["stock_movement_type"]
+          _unit_cost?: number
         }
         Returns: string
       }
@@ -6222,17 +6646,6 @@ export type Database = {
           _staff_id?: string
         }
         Returns: Json
-      }
-      record_stock_movement: {
-        Args: {
-          _branch_id: string
-          _item_id: string
-          _qty: number
-          _reason?: string
-          _type: Database["public"]["Enums"]["stock_movement_type"]
-          _unit_cost?: number
-        }
-        Returns: string
       }
       refund_order: {
         Args: {
@@ -6272,6 +6685,13 @@ export type Database = {
           _staff_id?: string
         }
         Returns: Json
+      }
+      refund_shift_for: {
+        Args: {
+          _method_key: string
+          _o: Database["public"]["Tables"]["orders"]["Row"]
+        }
+        Returns: string
       }
       refund_target_shift: {
         Args: { _branch_id: string; _method_key: string }
@@ -6317,8 +6737,14 @@ export type Database = {
         }
         Returns: string
       }
-      reverse_partner_dividend_payout: { Args: { _payout_id: string; _reason: string }; Returns: string }
-      reverse_payout: { Args: { _distribution_id: string; _reason: string }; Returns: string }
+      reverse_partner_dividend_payout: {
+        Args: { _payout_id: string; _reason: string }
+        Returns: string
+      }
+      reverse_payout: {
+        Args: { _distribution_id: string; _reason: string }
+        Returns: string
+      }
       review_expense: {
         Args: { _decision: string; _expense_id: string }
         Returns: string
@@ -6342,6 +6768,10 @@ export type Database = {
       }
       run_payroll: {
         Args: { _period_end: string; _period_start: string }
+        Returns: number
+      }
+      salary_line_cost: {
+        Args: { _s: Database["public"]["Tables"]["salary_payments"]["Row"] }
         Returns: number
       }
       sales_period_summary: {
@@ -6377,14 +6807,21 @@ export type Database = {
         Returns: undefined
       }
       set_cashback_settings: {
-        Args: { _enabled: boolean; _reward_amount: number; _target_amount: number }
+        Args: {
+          _enabled: boolean
+          _reward_amount: number
+          _target_amount: number
+        }
         Returns: Json
       }
       set_employee_hire_date: {
         Args: { _hire_date: string; _user_id: string }
         Returns: undefined
       }
-      set_item_waste_pct: { Args: { _item_id: string; _waste_pct: number }; Returns: undefined }
+      set_item_waste_pct: {
+        Args: { _item_id: string; _waste_pct: number }
+        Returns: undefined
+      }
       set_manager_compensation: {
         Args: {
           _basis: string
@@ -6534,6 +6971,7 @@ export type Database = {
           total: number
         }[]
       }
+      tender_key: { Args: { _method: string }; Returns: string }
       transfer_cash: {
         Args: {
           _amount: number
@@ -6572,7 +7010,12 @@ export type Database = {
         Returns: undefined
       }
       update_employee_advance: {
-        Args: { _advance_id: string; _amount: number; _deduct_month: string; _reason?: string }
+        Args: {
+          _advance_id: string
+          _amount: number
+          _deduct_month: string
+          _reason?: string
+        }
         Returns: string
       }
       update_employee_profile: {
@@ -6639,7 +7082,12 @@ export type Database = {
         }
         Returns: string
       }
-      waive_staff_penalty: { Args: { _penalty_id: string; _reason: string }; Returns: string }
+      waive_staff_penalty: {
+        Args: { _penalty_id: string; _reason: string }
+        Returns: string
+      }
+      waste_factor: { Args: { _item_id: string }; Returns: number }
+      waste_share_staff: { Args: { _company: string }; Returns: string[] }
       wipe_all_raw_materials: { Args: never; Returns: Json }
       work_day_close_at: {
         Args: { _company_id: string; _reference: string }
