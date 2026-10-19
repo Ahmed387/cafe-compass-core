@@ -426,18 +426,25 @@ function PosPage() {
   });
   const extrasLine = cart.find((l) => l.key === extrasLineKey) ?? null;
   function toggleLineExtra(mod: CartModifier) {
-    setCart((prev) =>
-      prev.map((l) =>
-        l.key !== extrasLineKey
-          ? l
-          : {
-              ...l,
-              modifiers: l.modifiers.some((m) => m.option_id === mod.option_id)
-                ? l.modifiers.filter((m) => m.option_id !== mod.option_id)
-                : [...l.modifiers, mod],
-            },
-      ),
-    );
+    const target = cart.find((l) => l.key === extrasLineKey);
+    if (!target) return;
+    const nextMods = target.modifiers.some((m) => m.option_id === mod.option_id)
+      ? target.modifiers.filter((m) => m.option_id !== mod.option_id)
+      : [...target.modifiers, mod];
+    // A line with several units: the extra goes on ONE unit only — split it into its own line.
+    if (target.quantity > 1) {
+      const newKey = `${target.key}-x${Date.now()}`;
+      setCart((prev) =>
+        prev.flatMap((l) =>
+          l.key !== target.key
+            ? [l]
+            : [{ ...l, quantity: l.quantity - 1 }, { ...l, key: newKey, quantity: 1, modifiers: nextMods }],
+        ),
+      );
+      setExtrasLineKey(newKey);
+      return;
+    }
+    setCart((prev) => prev.map((l) => (l.key !== target.key ? l : { ...l, modifiers: nextMods })));
   }
 
   const productImages = useProductImageUrls(
