@@ -13,6 +13,8 @@ import { useAuth } from "@/lib/auth";
 import { formatMoney, formatPercent, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { PartnerAccountLink } from "./PartnerAccountLink";
+import { SalaryPayDateInput } from "@/components/finance/SalaryPayDateInput";
+import { cafeToday, paySalaryOn, validPayDate } from "@/components/finance/pay-salary";
 
 type SalaryRow = { user_id: string; base_salary: number; bonuses: number; penalties: number; advances: number; absence_deduction: number; net_pay: number };
 
@@ -35,6 +37,7 @@ export function PartnerManagingPanel({ partnerId, userId, partnerName = "" }: { 
   const qc = useQueryClient();
   const { start, end } = monthBounds();
   const [method, setMethod] = useState<"cash" | "bank">("cash");
+  const [payDate, setPayDate] = useState(cafeToday());
   const [form, setForm] = useState({ salary: "", hire: "", job: "general_manager" });
 
   const superAdmin = useQuery({
@@ -118,8 +121,8 @@ export function PartnerManagingPanel({ partnerId, userId, partnerName = "" }: { 
       const d = info.data;
       if (!d) return;
       if (kind === "salary" && d.unpaidSalary) {
-        const { error } = await supabase.rpc("pay_salary", { _salary_id: d.unpaidSalary.id, _method: method });
-        if (error) throw error;
+        if (!validPayDate(payDate, cafeToday())) throw new Error(ar ? "اختار تاريخ صرف صحيح ومش بعد النهارده" : "Pick a valid pay date, not in the future");
+        await paySalaryOn(d.unpaidSalary.id, method, payDate);
       } else if (kind === "dividend" && d.dividend) {
         const { error } = await supabase.rpc("payout_partner_dividend", { _distribution_id: d.dividend.distribution_id, _partner_id: partnerId, _method: method });
         if (error) throw error;
@@ -207,6 +210,7 @@ export function PartnerManagingPanel({ partnerId, userId, partnerName = "" }: { 
                 <SelectItem value="bank">{ar ? "تحويل بنكي / إنستاباي" : "Bank / InstaPay"}</SelectItem>
               </SelectContent>
             </Select>
+            {d.managing && <SalaryPayDateInput value={payDate} onChange={setPayDate} lang={lang} id={`pay-date-${partnerId}`} />}
             {d.managing && <Button size="sm" variant="outline" disabled={!d.unpaidSalary || pay.isPending} onClick={() => pay.mutate("salary")}>💰 {ar ? "صرف الراتب" : "Pay salary"}</Button>}
             <Button size="sm" variant="outline" disabled={!d.dividend || pay.isPending} onClick={() => pay.mutate("dividend")}>💰 {ar ? "صرف الأرباح" : "Pay dividend"}</Button>
             {d.managing && <Button size="sm" disabled={!d.dividend || !d.unpaidSalary || pay.isPending} onClick={() => pay.mutate("both")}>💰 {ar ? "صرف الإجمالي معاً" : "Pay both"}</Button>}

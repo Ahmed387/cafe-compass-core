@@ -21,7 +21,8 @@ export function emptyTenders(): TenderTotals {
  */
 export function normalizeTender(methodKey: string | null | undefined): TenderKey | "points" {
   const value = (methodKey ?? "cash").toLowerCase();
-  if (value === "points") return "points";
+  // Customer credit (cashback wallet, legacy points) is not money in the drawer.
+  if (value === "points" || value === "cashback") return "points";
   if (value.includes("partner") || value.includes("tab") || value.includes("account")) return "partner_tab";
   if (value.includes("insta") || value.includes("bank")) return "instapay";
   if (value.includes("wallet") || value.includes("vodafone")) return "wallet";

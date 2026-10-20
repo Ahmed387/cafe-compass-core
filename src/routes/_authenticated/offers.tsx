@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, NoPermission, PageHeader } from "@/components/layout/AppShell";
+import { OfferAdvisorPanel } from "@/components/offers/OfferAdvisorPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -601,6 +602,12 @@ function OffersPage() {
 
         {/* Build offers */}
         <TabsContent value="build" className="space-y-4">
+          <OfferAdvisorPanel
+            lang={lang}
+            currency={currency}
+            isSuperAdmin={Boolean(me?.isRoot || me?.roleNames.includes("Super Admin"))}
+            canManage={canManage}
+          />
           <Card>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
               <CardTitle>{t("off.pick")}</CardTitle>

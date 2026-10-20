@@ -92,11 +92,11 @@ export function RefundBearerList({
           <p className="text-xs text-muted-foreground">
             {canDecide
               ? ar
-                ? "الوردية مش هتتقفل غير لما كل مرتجع ياخد قرار. «تيم الوردية» بيتقسم بالتساوي على اللي كانوا شغالين في الوردية دي بس."
+                ? "الوردية مش هتتقفل غير لما كل مرتجع ياخد قرار، حسب اللي الإدارة قالتهولك. «تيم الوردية» بيتقسم بالتساوي على اللي كانوا شغالين في الوردية دي بس. المدير يقدر يغيّر القرار بعدين من صفحة الورديات."
                 : "The shift can't close until each refund has a bearer. “Shift team” is split equally between the people on this shift."
               : ar
-                ? "المدير هو اللي يحدد مين يتحمل كل مرتجع قبل قفل الوردية."
-                : "A manager must decide each refund's bearer before closing."}
+                ? "اللي بيقفل الوردية بيحدد مين يتحمل كل مرتجع قبل القفل."
+                : "Whoever closes the shift picks each refund's bearer first."}
           </p>
         </div>
       </div>

@@ -11,6 +11,7 @@ import { OrderDetailsDialog, type OrderDetails } from "@/components/orders/Order
 import { PreparedDisposition, useDisposition } from "@/components/orders/PreparedDisposition";
 import { Pagination } from "@/components/shared";
 import { ShortageBearerCell } from "@/modules/operations/ShortageBearerCell";
+import { ShiftRefundBearersButton } from "@/modules/operations/ShiftRefundBearersButton";
 import { KpiCard, KpiDetailRows, KpiGrid } from "@/components/shared/KpiCard";
 import { emptyTenders, normalizeTender, type TenderKey, netInvoiceTotal, saleRefundTotal } from "@/core/finance/formulas";
 import { EditClosingCashButton } from "@/modules/operations/EditClosingCashButton";
@@ -76,6 +77,15 @@ export const Route = createFileRoute("/_authenticated/orders/")({
 });
 
 const PAGE_SIZE = 25;
+
+/** Human name of a tender key for the invoices table and export. */
+function tenderLabel(key: string, lang: "ar" | "en") {
+  const k = normalizeTender(key);
+  const ar: Record<string, string> = { cash: "كاش", instapay: "إنستاباي", wallet: "محفظة", visa: "فيزا", points: "نقاط", partner_tab: "حساب شريك" };
+  const en: Record<string, string> = { cash: "Cash", instapay: "InstaPay", wallet: "Wallet", visa: "Card", points: "Points", partner_tab: "Partner tab" };
+  if (key === "cashback") return lang === "ar" ? "كاش باك" : "Cashback";
+  return (lang === "ar" ? ar : en)[k] ?? key;
+}
 
 function isoDay(offsetDays: number) {
   const d = new Date();
@@ -495,8 +505,8 @@ function OrdersPage() {
       };
 
       const detailLines: ShiftInvoiceLineExport[] = orderRows.flatMap((order) => {
-        const payments = (order.order_payments ?? []).map((payment) =>
-          payment.method_key.toLowerCase() === "cash" ? "كاش" : "فيزا / إلكتروني",
+        const payments = (order.order_payments ?? []).map(
+          (payment) => `${tenderLabel(payment.method_key, "ar")} ${Number(payment.amount).toFixed(2)}`,
         );
         const paymentMethod = [...new Set(payments)].join(" + ") || "—";
         const refundReasons = (order.order_refunds ?? [])
@@ -894,7 +904,11 @@ function OrdersPage() {
                         <TableCell className="w-28 text-center text-xs">
                           {onPartnerTab
                             ? t("orders.partnerTab")
-                            : order.order_payments.map((p) => p.method_key).join(", ")}
+                            : order.order_payments.length > 1
+                              ? order.order_payments
+                                  .map((p) => `${tenderLabel(p.method_key, lang)} ${formatMoney(Number(p.amount), currency, lang)}`)
+                                  .join(" + ")
+                              : order.order_payments.map((p) => tenderLabel(p.method_key, lang)).join(", ")}
                         </TableCell>
                         <TableCell className="w-28 whitespace-nowrap text-end font-mono font-semibold tabular-nums">
                           {formatMoney(order.total, currency, lang)}
@@ -967,7 +981,10 @@ function OrdersPage() {
                                 {t("orders.deliver")}
                               </Button>
                             )}
-                            {(order.status === "pending" || order.status === "open") &&
+                            {(order.status === "pending" ||
+                              order.status === "open" ||
+                              // A partner-tab invoice is "completed" at once; cancelling it takes it off the partner's account.
+                              (order.status === "completed" && onPartnerTab && order.order_payments.length === 0)) &&
                               (can("pos.cancel_order") || can("pos.create_order")) && (
                                 <Button
                                   size="sm"
@@ -1126,6 +1143,9 @@ function OrdersPage() {
                               editable={canExportShifts}
                               lang={lang}
                             />
+                            {row.status === "closed" && (can("shifts.adjust_cash") || Boolean(me?.isRoot || me?.roleNames.includes("Super Admin"))) && (
+                              <ShiftRefundBearersButton shiftId={row.id} currency={currency} lang={lang} />
+                            )}
                           </TableCell>
                           <TableCell className="w-32 text-center">
                             <Badge variant={row.status === "open" ? "secondary" : "outline"}>

@@ -12,6 +12,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { formatMoney, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { SalaryPayDateInput } from "@/components/finance/SalaryPayDateInput";
+import { cafeToday, paySalaryOn, validPayDate } from "@/components/finance/pay-salary";
 
 /** Super Admin switch: act as salaried General Manager (shows in HR) or pure owner (hidden). */
 export function SuperAdminManagingCard() {
@@ -20,6 +22,7 @@ export function SuperAdminManagingCard() {
   const { me } = useAuth();
   const qc = useQueryClient();
   const [method, setMethod] = useState<"cash" | "bank">("cash");
+  const [payDate, setPayDate] = useState(cafeToday());
   const [form, setForm] = useState({ salary: "", hire: "", job: "general_manager" });
 
   const info = useQuery({
@@ -68,8 +71,8 @@ export function SuperAdminManagingCard() {
   const pay = useMutation({
     mutationFn: async () => {
       if (!info.data?.unpaid) return;
-      const { error } = await supabase.rpc("pay_salary", { _salary_id: info.data.unpaid.id, _method: method });
-      if (error) throw error;
+      if (!validPayDate(payDate, cafeToday())) throw new Error(ar ? "اختار تاريخ صرف صحيح ومش بعد النهارده" : "Pick a valid pay date, not in the future");
+      await paySalaryOn(info.data.unpaid.id, method, payDate);
     },
     onSuccess: () => { toast.success(ar ? "تم الصرف" : "Paid out"); refresh(); },
     onError: (e) => toast.error(friendlyError(e, lang)),
@@ -117,6 +120,7 @@ export function SuperAdminManagingCard() {
                   <SelectItem value="bank">{ar ? "تحويل بنكي / إنستاباي" : "Bank / InstaPay"}</SelectItem>
                 </SelectContent>
               </Select>
+              <SalaryPayDateInput value={payDate} onChange={setPayDate} lang={lang} id="pay-date-super-admin" />
               <Button size="sm" disabled={!d.unpaid || pay.isPending} onClick={() => pay.mutate()}>💰 {ar ? "صرف الراتب" : "Pay salary"}</Button>
               {!d.unpaid && <span className="text-xs text-muted-foreground">{ar ? "أصدر رواتب الشهر من الموارد البشرية أولاً." : "Generate payroll in HR first."}</span>}
             </div>

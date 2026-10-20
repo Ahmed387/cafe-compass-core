@@ -9,6 +9,7 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
+    "test": "node --experimental-strip-types --no-warnings --test tests/unit/*.test.ts",
     "format": "prettier --write ."
   },
   "dependencies": {

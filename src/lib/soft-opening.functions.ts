@@ -86,3 +86,30 @@ export const getSoftOpeningCatalog = createServerFn({ method: "GET" }).handler(
     }));
   },
 );
+export type MenuOffer = {
+  id: string;
+  title: string;
+  offer_price: number;
+  base_price: number;
+  product_name: string | null;
+  product_name_ar: string | null;
+  ends_at: string | null;
+};
+
+/** Offers approved on the offers page, shown at the top of the public menu. Empty if none or not set up yet. */
+export const getMenuOffers = createServerFn({ method: "GET" }).handler(async (): Promise<MenuOffer[]> => {
+  const client = createClient(process.env["SUPABASE_URL"]!, process.env["SUPABASE_PUBLISHABLE_KEY"]!, {
+    auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
+  });
+  const { data, error } = await client.rpc("public_menu_offers" as never);
+  if (error || !Array.isArray(data)) return [];
+  return (data as Record<string, unknown>[]).map((row) => ({
+    id: String(row["id"]),
+    title: String(row["title"] ?? ""),
+    offer_price: Number(row["offer_price"] ?? 0),
+    base_price: Number(row["base_price"] ?? 0),
+    product_name: (row["product_name"] as string | null) ?? null,
+    product_name_ar: (row["product_name_ar"] as string | null) ?? null,
+    ends_at: (row["ends_at"] as string | null) ?? null,
+  }));
+});
