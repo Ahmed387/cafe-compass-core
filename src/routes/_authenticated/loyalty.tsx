@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Coins, Gift, Save, Target, UserPlus, Wallet } from "lucide-react";
+import { Coins, Gift, RotateCcw, Save, Target, UserPlus, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -136,16 +136,6 @@ function CashbackPage() {
     if (!ok) toast.error(t("orders.printBlocked"));
   };
 
-  const visitCfg = useQuery({
-    queryKey: ["visit-rewards-config", me?.profile.company_id],
-    enabled: Boolean(me?.profile.company_id),
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("visit_rewards_config" as never, { _company: me!.profile.company_id } as never);
-      if (error) throw error;
-      return (data ?? { enabled: false, visits_per_reward: 10 }) as VisitRewardConfig;
-    },
-  });
-  const visitsNeeded = Number(visitCfg.data?.visits_per_reward ?? 10);
 
   return (
     <div className="space-y-5">
@@ -167,7 +157,7 @@ function CashbackPage() {
       </KpiGrid>
 
       {isSuperAdmin && cfg && <CashbackRuleCard config={cfg} lang={lang} money={money} onSaved={() => qc.invalidateQueries({ queryKey: ["cashback-settings"] })} />}
-      {isSuperAdmin && visitCfg.data && <VisitRewardCard config={visitCfg.data} lang={lang} onSaved={() => qc.invalidateQueries({ queryKey: ["visit-rewards-config"] })} />}
+      {/* Visit stamps were retired on 2026-10-20: cashback is the one loyalty rule. Their data stays. */}
 
       <section className="space-y-3">
         <Input placeholder={ar ? "دوّر بالاسم أو الموبايل أو الكود" : "Search name, phone or code"} value={search}
@@ -183,7 +173,7 @@ function CashbackPage() {
                   <TableHead>{t("common.phone")}</TableHead>
                   <TableHead className="text-end">{ar ? "المحفظة" : "Wallet"}</TableHead>
                   <TableHead className="min-w-40">{ar ? "للمكافأة الجاية" : "To next reward"}</TableHead>
-                  <TableHead className="text-center">{ar ? "للمشروب المجاني" : "Free drink"}</TableHead>
+                  <TableHead className="text-center">{ar ? "الزيارات" : "Visits"}</TableHead>
                   <TableHead className="text-end">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -204,22 +194,14 @@ function CashbackPage() {
                           </div>
                         ) : <span className="text-xs text-muted-foreground">—</span>}
                       </TableCell>
-                      <TableCell className="text-center tabular-nums">
-                        {visitCfg.data?.enabled ? (
-                          Number(row.points_balance ?? 0) >= visitsNeeded ? (
-                            <Badge className="bg-success/15 text-success">{ar ? "مستحق" : "Ready"}</Badge>
-                          ) : (
-                            <span>{Number(row.points_balance ?? 0)}/{visitsNeeded}</span>
-                          )
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                        <span className="block text-[10px] text-muted-foreground">{ar ? `${row.visits} زيارة كلها` : `${row.visits} visits total`}</span>
-                      </TableCell>
+                      <TableCell className="text-center tabular-nums">{row.visits}</TableCell>
                       <TableCell className="space-x-2 whitespace-nowrap text-end">
                         <Button size="sm" variant="secondary" onClick={() => setHistoryFor(row)}>{ar ? "الحركات" : "History"}</Button>
                         <Button size="sm" variant="outline" onClick={() => printCard(row)}>{ar ? "اطبع الكارت" : "Print card"}</Button>
                         {isSuperAdmin && <Button size="sm" variant="outline" onClick={() => setEditFor(row)}>{ar ? "تعديل" : "Edit"}</Button>}
+                        {isSuperAdmin && Number(row.cashback_progress) > 0 && (
+                          <ResetCashbackButton customerId={row.id} lang={lang} onDone={() => qc.invalidateQueries({ queryKey: ["loyalty-customers"] })} />
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -257,6 +239,8 @@ function CashbackRuleCard({ config, lang, money, onSaved }: {
   });
   const t = Number(target), r = Number(reward);
   const valid = t > 0 && r > 0 && r < t;
+  // Turning it off never needs valid numbers: the last target and reward are kept.
+  const canSave = valid || !enabled;
 
   return (
     <section className="card-surface rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
@@ -280,7 +264,15 @@ function CashbackRuleCard({ config, lang, money, onSaved }: {
           <Label htmlFor="cb-reward">{ar ? "ياخد في محفظته" : "They get in their wallet"}</Label>
           <Input id="cb-reward" inputMode="decimal" value={reward} onChange={(e) => setReward(e.target.value)} />
         </div>
-        <Button disabled={!valid || save.isPending} onClick={() => save.mutate()}><Save className="me-1 size-4" />{ar ? "احفظ" : "Save"}</Button>
+        <Button disabled={!canSave || save.isPending} onClick={() => save.mutate()}><Save className="me-1 size-4" />{ar ? "احفظ" : "Save"}</Button>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+        <ResetCashbackButton lang={lang} onDone={onSaved} />
+        <span className="text-xs text-muted-foreground">
+          {ar
+            ? "بيرجّع العدّاد للصفر عند كل العملاء. الفلوس اللي في المحافظ مش بتتلمس، ومحدش يقدر يسحبها كاش: بتتصرف في فواتير بس."
+            : "Restarts every customer's progress at zero. Wallet money stays, and it can only pay invoices, never be cashed out."}
+        </span>
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
         {valid
@@ -292,42 +284,36 @@ function CashbackRuleCard({ config, lang, money, onSaved }: {
   );
 }
 
-type VisitRewardConfig = { enabled: boolean; visits_per_reward: number };
-
-function VisitRewardCard({ config, lang, onSaved }: { config: VisitRewardConfig; lang: "ar" | "en"; onSaved: () => void }) {
+/** Restart the cashback target for one customer (customerId) or for every customer. Two taps, no browser dialog. */
+function ResetCashbackButton({ customerId, lang, onDone }: { customerId?: string; lang: "ar" | "en"; onDone: () => void }) {
   const ar = lang === "ar";
-  const [enabled, setEnabled] = useState(config.enabled);
-  const [visits, setVisits] = useState(String(config.visits_per_reward));
-  useEffect(() => { setEnabled(config.enabled); setVisits(String(config.visits_per_reward)); }, [config]);
-  const save = useMutation({
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const timer = setTimeout(() => setArmed(false), 5000);
+    return () => clearTimeout(timer);
+  }, [armed]);
+  const reset = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.rpc("set_visit_rewards" as never, { _enabled: enabled, _visits_per_reward: Number(visits) } as never);
+      const { data, error } = await supabase.rpc("reset_cashback_progress" as never, { _customer_id: customerId ?? null } as never);
       if (error) throw error;
+      return Number(data ?? 0);
     },
-    onSuccess: () => { toast.success(ar ? "اتحفظت مكافأة الزيارات" : "Visit reward saved"); onSaved(); },
+    onSuccess: (n) => {
+      setArmed(false);
+      toast.success(ar ? `اتصفّر التارجت (${n} عميل)` : `Target restarted (${n} customers)`);
+      onDone();
+    },
     onError: (e) => toast.error(friendlyError(e, lang)),
   });
-  const n = Number(visits);
-  const valid = Number.isInteger(n) && n >= 2 && n <= 100;
+  const label = customerId
+    ? armed ? (ar ? "متأكد؟ صفّر" : "Sure? Reset") : (ar ? "صفّر التارجت" : "Reset target")
+    : armed ? (ar ? "متأكد؟ صفّر للكل" : "Sure? Reset all") : (ar ? "صفّر التارجت لكل العملاء" : "Reset target for everyone");
   return (
-    <section className="card-surface rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <SectionTitle icon={Gift}>{ar ? "مكافأة الزيارات" : "Visit reward"}</SectionTitle>
-        <label className="flex items-center gap-2 text-sm">{ar ? "مفعّل" : "Enabled"}<Switch checked={enabled} onCheckedChange={setEnabled} /></label>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-        <div className="space-y-1">
-          <Label htmlFor="vr-visits">{ar ? "كل كام زيارة = مشروب مجاني" : "Visits per free drink"}</Label>
-          <Input id="vr-visits" inputMode="numeric" value={visits} onChange={(e) => setVisits(e.target.value)} />
-        </div>
-        <Button disabled={!valid || save.isPending} onClick={() => save.mutate()}><Save className="me-1 size-4" />{ar ? "احفظ" : "Save"}</Button>
-      </div>
-      <p className="mt-3 text-xs text-muted-foreground">
-        {ar
-          ? "الزيارة بتتحسب مرة واحدة في اليوم مهما العميل طلب. لما يكمّل العدد، الكاشير بيشوف «اجعله مجاني» جنب المشروبات ويختار واحد. الكاش باك شغال عادي جنبها."
-          : "A visit counts once a day however many orders. When reached, the cashier sees “Make it free” on drinks and picks one. Cashback keeps working alongside."}
-      </p>
-    </section>
+    <Button size="sm" variant={armed ? "destructive" : "outline"} disabled={reset.isPending}
+      onClick={() => (armed ? reset.mutate() : setArmed(true))}>
+      <RotateCcw className="me-1 size-4" />{label}
+    </Button>
   );
 }
 

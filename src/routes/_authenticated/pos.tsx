@@ -53,6 +53,9 @@ import { invoiceSequence, printBaristaTicket, printReceipt } from "@/lib/receipt
 import { printShiftCloseReport } from "@/lib/shift-close-print";
 import { useProductImageUrls } from "@/lib/product-images";
 import { softOpeningImage, type ServeType } from "@/lib/soft-opening-catalog";
+import { CustomerSuggestionList } from "@/modules/operations/CustomerSuggestionList";
+import { customerLookupTerm, usePosCustomerLookup } from "@/modules/operations/pos-customer-lookup";
+import { addTender, singleTender, summarizePayments, toServerPayments, type TenderRow } from "@/modules/operations/payment-split";
 import { SoldOutToggle } from "@/modules/operations/SoldOutToggle";
 import { BarLowStockAlert, LowStockCardBadge, useBarLowStock } from "@/modules/supply/bar-low-stock";
 import {
@@ -154,12 +157,15 @@ type ProductRow = {
   }>;
 };
 
-/** One tender line on the split-payment sheet ("cashback" pays from the customer's wallet). */
-type PayRow = {
-  id: string;
-  methodKey: string;
-  amount: string;
-};
+type PayRow = TenderRow;
+
+function tenderName(key: string, name: string, lang: "ar" | "en") {
+  if (key === "cash") return lang === "ar" ? "💵 كاش" : "💵 Cash";
+  if (key === "instapay") return lang === "ar" ? "📱 إنستاباي" : "📱 InstaPay";
+  if (key === "wallet") return lang === "ar" ? "👛 محفظة إلكترونية" : "👛 Wallet";
+  if (key === "visa" || key === "card") return lang === "ar" ? "💳 فيزا" : "💳 Card";
+  return name;
+}
 
 function newPayRow(methodKey: string, amount = ""): PayRow {
   return {
@@ -519,10 +525,17 @@ function PosPage() {
     queryKey: ["payment-methods"],
     enabled: canUse,
     queryFn: async () => {
+      // receiver_account: InstaPay handle / wallet number the customer pays to.
+      // A database without that column must still load every tender (cash, InstaPay, wallet…).
+      const withAccount = await supabase
+        .from("payment_methods")
+        .select("id, key, name, kind, receiver_account" as "id, key, name, kind")
+        .eq("is_active", true)
+        .order("name");
+      if (!withAccount.error) return withAccount.data ?? [];
       const { data, error } = await supabase
         .from("payment_methods")
-        // receiver_account: InstaPay handle / wallet number the customer pays to.
-        .select("id, key, name, kind, receiver_account" as "id, key, name, kind")
+        .select("id, key, name, kind")
         .eq("is_active", true)
         .order("name");
       if (error) throw error;
@@ -1075,28 +1088,17 @@ function PosPage() {
 
   // Split payments. A "cashback" line pays from the linked customer's wallet.
   const walletBalance = Number(customer?.wallet_balance ?? 0);
-  const visitRewards = useQuery({
-    queryKey: ["visit-rewards-config", me?.profile.company_id],
-    enabled: Boolean(me?.profile.company_id),
-    staleTime: 5 * 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("visit_rewards_config" as never, { _company: me!.profile.company_id } as never);
-      if (error) throw error;
-      return (data ?? {}) as { enabled?: boolean; visits_per_reward?: number };
-    },
-  });
-  const visitRewardsOn = visitRewards.data?.enabled === true;
-  const visitsNeeded = Number(visitRewards.data?.visits_per_reward ?? 10);
+  // Visit stamps were retired on 2026-10-20 (cashback is the loyalty rule); their data is kept.
+  const visitRewardsOn = false;
+  const visitsNeeded = 10;
   const visitStamps = Number(customer?.points_balance ?? 0);
   const rewardEligible = visitRewardsOn && Boolean(customer) && visitStamps >= visitsNeeded && partnerMode !== "tab";
-  const rowAmount = (row: PayRow) => Number(row.amount) || 0;
-  const paidSum = Math.round(payRows.reduce((sum, row) => sum + rowAmount(row), 0) * 100) / 100;
-  const cashbackUsed = Math.round(
-    payRows.filter((row) => row.methodKey === "cashback").reduce((sum, row) => sum + rowAmount(row), 0) * 100,
-  ) / 100;
-  const payRemaining = Math.round((totals.total - paidSum) * 100) / 100;
-  const payBalanced = Math.abs(payRemaining) < 0.005;
-  const cashbackOver = cashbackUsed > walletBalance + 0.001;
+  const paySummary = summarizePayments(payRows, totals.total, walletBalance);
+  const paidSum = paySummary.paid;
+  const cashbackUsed = paySummary.cashbackUsed;
+  const payRemaining = paySummary.remaining;
+  const payBalanced = paySummary.balanced && !paySummary.hasNegative;
+  const cashbackOver = paySummary.cashbackOver;
   // Cashback the customer will earn with this bill (wallet money doesn't count toward the target).
   const cashbackPreview = (() => {
     if (!cashbackOn || !cashback.data) return { earn: 0, left: 0 };
@@ -1124,25 +1126,12 @@ function PosPage() {
 
   // Live suggestions while the cashier types a name / phone / customer ID.
 
-  // Phone-first lookup: typing a phone in the quick-add box also searches saved customers.
-  const searchTerm = (customerQuery.trim() || customerPhone.trim()).replace(/[%,()]/g, "");
-  const customerSearch = useQuery({
-    queryKey: ["pos-customer-search", searchTerm],
-    enabled: can("loyalty.view") && !customer && searchTerm.length >= 2,
-    queryFn: async () => {
-      const term = searchTerm;
-      const { data, error } = await supabase
-        .from("customers")
-        .select("id, code, name, phone, wallet_balance, cashback_progress, points_balance")
-        .eq("is_active", true)
-        .or(
-          `phone.ilike.%${term}%,code.ilike.%${term}%,barcode.ilike.%${term}%,name.ilike.%${term}%`,
-        )
-        .order("last_visit_at", { ascending: false, nullsFirst: false })
-        .limit(8);
-      if (error) throw error;
-      return data ?? [];
-    },
+  // Phone-first lookup: 3 digits in the phone box (or 2 characters in the search box)
+  // list saved customers. Any seller sees it; the server returns till fields only.
+  const searchTerm = customerLookupTerm(customerQuery, customerPhone);
+  const customerSearch = usePosCustomerLookup(searchTerm, {
+    enabled: canUse && !customer,
+    canBrowseCustomers: can("loyalty.view"),
   });
 
   const pickCustomer = (row: {
@@ -1210,16 +1199,7 @@ function PosPage() {
         if (!payBalanced) throw new Error("Payments must match the order total");
         if (cashbackOver) throw new Error(lang === "ar" ? "الكاش باك المستخدم أكبر من رصيد العميل" : "Cashback used exceeds the customer's wallet");
       }
-      const payments = payRows
-        .map((row) => {
-          if (row.methodKey === "cashback") return { method_key: "cashback", amount: rowAmount(row) };
-          return {
-            payment_method_id: methodByKey(row.methodKey)?.id ?? null,
-            method_key: row.methodKey,
-            amount: rowAmount(row),
-          };
-        })
-        .filter((row) => Number(row.amount) > 0);
+      const payments = toServerPayments(payRows, (key) => methodByKey(key)?.id ?? null);
       const { data, error } = await supabase.rpc("create_pos_order", {
         _branch_id: currentBranchId!,
         _items: cart.map((line) => ({
@@ -1961,7 +1941,20 @@ function PosPage() {
                           placeholder={t("common.phone")}
                           value={customerPhone}
                           onChange={(e) => setCustomerPhone(e.target.value)}
+                          onKeyDown={(e) => {
+                            const first = customerSearch.data?.[0];
+                            if (e.key === "Enter" && first && !customerQuery.trim()) pickCustomer(first);
+                          }}
                         />
+                        {!customerQuery.trim() && searchTerm && (
+                          <CustomerSuggestionList
+                            rows={customerSearch.data ?? []}
+                            loading={customerSearch.isFetching}
+                            lang={lang}
+                            currency={currency}
+                            onPick={pickCustomer}
+                          />
+                        )}
                         <Button
                           size="sm"
                           className="w-full"
@@ -2004,42 +1997,14 @@ function PosPage() {
                           </div>
 
                           {customerQuery.trim().length >= 2 && (
-                            <div className="max-h-40 overflow-y-auto rounded-md border border-border">
-                              {customerSearch.isFetching &&
-                              (customerSearch.data ?? []).length === 0 ? (
-                                <p className="p-2 text-xs text-muted-foreground">
-                                  {t("common.loading")}
-                                </p>
-                              ) : (customerSearch.data ?? []).length === 0 ? (
-                                <p className="p-2 text-xs text-muted-foreground">
-                                  {t("pos.customerNotFound")}
-                                </p>
-                              ) : (
-                                (customerSearch.data ?? []).map((row) => (
-                                  <button
-                                    key={row.id}
-                                    type="button"
-                                    onClick={() => pickCustomer(row)}
-                                    className="flex w-full items-center justify-between gap-2 border-b border-border px-2 py-1.5 text-left text-xs transition-colors last:border-0 hover:bg-accent"
-                                  >
-                                    <span className="truncate">
-                                      <span className="font-medium">{row.name}</span>{" "}
-                                      <span className="text-muted-foreground">
-                                        {row.phone ?? ""}
-                                      </span>
-                                    </span>
-                                    <span className="flex shrink-0 items-center gap-2">
-                                      <span className="font-mono text-muted-foreground">
-                                        {row.code}
-                                      </span>
-                                      <Badge variant="secondary">
-                                        {formatMoney(Number(row.wallet_balance), currency, lang)}
-                                      </Badge>
-                                    </span>
-                                  </button>
-                                ))
-                              )}
-                            </div>
+                            <CustomerSuggestionList
+                              rows={customerSearch.data ?? []}
+                              loading={customerSearch.isFetching}
+                              lang={lang}
+                              currency={currency}
+                              onPick={pickCustomer}
+                              emptyText={t("pos.customerNotFound")}
+                            />
                           )}
                         </>
                       )}
@@ -2299,6 +2264,15 @@ function PosPage() {
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
                     />
+                    {!customer && searchTerm && (
+                      <CustomerSuggestionList
+                        rows={customerSearch.data ?? []}
+                        loading={customerSearch.isFetching}
+                        lang={lang}
+                        currency={currency}
+                        onPick={pickCustomer}
+                      />
+                    )}
                   </div>
                 )}
               </div>
@@ -2605,6 +2579,33 @@ function PosPage() {
                   </Button>
                 </div>
               )}
+              {(methods.data ?? []).length > 0 && (
+                <div className="grid gap-1.5">
+                  <Label className="text-xs text-muted-foreground">
+                    {lang === "ar" ? "ادفع الفاتورة كلها بـ" : "Pay the whole bill by"}
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    {(methods.data ?? []).map((m) => {
+                      const only = payRows.length === 1 && payRows[0]?.methodKey === m.key && payBalanced;
+                      return (
+                        <Button
+                          key={m.id}
+                          type="button"
+                          size="sm"
+                          variant={only ? "default" : "outline"}
+                          className="min-h-10"
+                          onClick={() => {
+                            setPayRows(singleTender(m.key, totals.total, () => newPayRow(m.key).id));
+                            if (m.key === "cash") setCashReceived(totals.total.toFixed(2));
+                          }}
+                        >
+                          {tenderName(m.key, m.name, lang)}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {payRows.map((row, index) => {
                 const method = methodByKey(row.methodKey);
                 const isCashback = row.methodKey === "cashback";
@@ -2636,19 +2637,7 @@ function PosPage() {
                           <SelectContent>
                             {(methods.data ?? []).map((m) => (
                               <SelectItem key={m.id} value={m.key}>
-                                {m.key === "cash"
-                                  ? lang === "ar"
-                                    ? "💵 كاش"
-                                    : "💵 Cash"
-                                  : m.key === "instapay"
-                                    ? lang === "ar"
-                                      ? "📱 إنستاباي"
-                                      : "📱 InstaPay"
-                                    : m.key === "wallet"
-                                      ? lang === "ar"
-                                        ? "👛 محفظة إلكترونية"
-                                        : "👛 Wallet"
-                                      : m.name}
+                                {tenderName(m.key, m.name, lang)}
                               </SelectItem>
                             ))}
                             {customer && (walletBalance > 0 || isCashback) && (
@@ -2714,10 +2703,11 @@ function PosPage() {
                 size="sm"
                 className="w-full transition-all duration-200"
                 onClick={() =>
-                  setPayRows((prev) => [
-                    ...prev,
-                    newPayRow("cash", Math.max(payRemaining, 0).toFixed(2)),
-                  ])
+                  setPayRows((prev) => {
+                    const used = new Set(prev.map((r) => r.methodKey));
+                    const next = (methods.data ?? []).find((m) => !used.has(m.key))?.key ?? "cash";
+                    return addTender(prev, next, totals.total, () => newPayRow(next).id);
+                  })
                 }
               >
                 <Plus className="me-1 size-4" />

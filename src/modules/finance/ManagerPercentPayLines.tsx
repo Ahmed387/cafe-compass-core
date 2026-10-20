@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Briefcase, CheckCircle2, Wallet } from "lucide-react";
 import { useState } from "react";
+
+import { SalaryPayDateInput } from "@/components/finance/SalaryPayDateInput";
+import { cafeToday, paySalaryOn, validPayDate } from "@/components/finance/pay-salary";
 import { toast } from "sonner";
 
 import { CollapsibleSection } from "@/components/shared/KpiCard";
@@ -26,6 +29,7 @@ export function ManagerPercentPayLines({ start, end }: { start: string; end: str
   const manage = can("payroll.manage");
   const money = (v: number) => formatMoney(Number(v), me?.company?.currency ?? "EGP", lang);
   const [method, setMethod] = useState("cash");
+  const [payDate, setPayDate] = useState(cafeToday());
 
   const q = useQuery({
     queryKey: ["hr-manager-percent", start, end],
@@ -60,8 +64,8 @@ export function ManagerPercentPayLines({ start, end }: { start: string; end: str
         if (error) throw error;
         id = data as unknown as string;
       }
-      const { error } = await supabase.rpc("pay_salary", { _salary_id: id!, _method: method });
-      if (error) throw error;
+      if (!validPayDate(payDate, cafeToday())) throw new Error(ar ? "اختار تاريخ صرف صحيح ومش بعد النهارده" : "Pick a valid pay date, not in the future");
+      await paySalaryOn(id!, method, payDate);
     },
     onSuccess: () => { toast.success(ar ? "تم صرف الراتب" : "Salary paid"); refresh(); },
     onError: (e: Error) => toast.error(e.message),
@@ -76,6 +80,8 @@ export function ManagerPercentPayLines({ start, end }: { start: string; end: str
       description={ar ? "صافي الربح × نسبة المدير. يُحدَّث تلقائيًا حتى الصرف، ثم يُثبَّت ولا يُخصم مرتين من الأرباح." : "Net profit × manager %. Updates live until paid, then it's fixed and never deducted twice."}
       icon={<Briefcase className="h-4 w-4" />}
       actions={manage ? (
+        <div className="flex items-end gap-2">
+        <SalaryPayDateInput value={payDate} onChange={setPayDate} lang={lang} id="pay-date-manager-percent" />
         <Select value={method} onValueChange={setMethod}>
           <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -83,6 +89,7 @@ export function ManagerPercentPayLines({ start, end }: { start: string; end: str
             <SelectItem value="bank">{ar ? "بنك" : "Bank"}</SelectItem>
           </SelectContent>
         </Select>
+        </div>
       ) : undefined}
     >
       <div className="space-y-2">

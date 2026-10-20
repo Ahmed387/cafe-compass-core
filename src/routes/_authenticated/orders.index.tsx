@@ -77,6 +77,15 @@ export const Route = createFileRoute("/_authenticated/orders/")({
 
 const PAGE_SIZE = 25;
 
+/** Human name of a tender key for the invoices table and export. */
+function tenderLabel(key: string, lang: "ar" | "en") {
+  const k = normalizeTender(key);
+  const ar: Record<string, string> = { cash: "كاش", instapay: "إنستاباي", wallet: "محفظة", visa: "فيزا", points: "نقاط", partner_tab: "حساب شريك" };
+  const en: Record<string, string> = { cash: "Cash", instapay: "InstaPay", wallet: "Wallet", visa: "Card", points: "Points", partner_tab: "Partner tab" };
+  if (key === "cashback") return lang === "ar" ? "كاش باك" : "Cashback";
+  return (lang === "ar" ? ar : en)[k] ?? key;
+}
+
 function isoDay(offsetDays: number) {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
@@ -495,8 +504,8 @@ function OrdersPage() {
       };
 
       const detailLines: ShiftInvoiceLineExport[] = orderRows.flatMap((order) => {
-        const payments = (order.order_payments ?? []).map((payment) =>
-          payment.method_key.toLowerCase() === "cash" ? "كاش" : "فيزا / إلكتروني",
+        const payments = (order.order_payments ?? []).map(
+          (payment) => `${tenderLabel(payment.method_key, "ar")} ${Number(payment.amount).toFixed(2)}`,
         );
         const paymentMethod = [...new Set(payments)].join(" + ") || "—";
         const refundReasons = (order.order_refunds ?? [])
@@ -894,7 +903,11 @@ function OrdersPage() {
                         <TableCell className="w-28 text-center text-xs">
                           {onPartnerTab
                             ? t("orders.partnerTab")
-                            : order.order_payments.map((p) => p.method_key).join(", ")}
+                            : order.order_payments.length > 1
+                              ? order.order_payments
+                                  .map((p) => `${tenderLabel(p.method_key, lang)} ${formatMoney(Number(p.amount), currency, lang)}`)
+                                  .join(" + ")
+                              : order.order_payments.map((p) => tenderLabel(p.method_key, lang)).join(", ")}
                         </TableCell>
                         <TableCell className="w-28 whitespace-nowrap text-end font-mono font-semibold tabular-nums">
                           {formatMoney(order.total, currency, lang)}
