@@ -11,6 +11,7 @@ import { OrderDetailsDialog, type OrderDetails } from "@/components/orders/Order
 import { PreparedDisposition, useDisposition } from "@/components/orders/PreparedDisposition";
 import { Pagination } from "@/components/shared";
 import { ShortageBearerCell } from "@/modules/operations/ShortageBearerCell";
+import { ShiftRefundBearersButton } from "@/modules/operations/ShiftRefundBearersButton";
 import { KpiCard, KpiDetailRows, KpiGrid } from "@/components/shared/KpiCard";
 import { emptyTenders, normalizeTender, type TenderKey, netInvoiceTotal, saleRefundTotal } from "@/core/finance/formulas";
 import { EditClosingCashButton } from "@/modules/operations/EditClosingCashButton";
@@ -980,7 +981,10 @@ function OrdersPage() {
                                 {t("orders.deliver")}
                               </Button>
                             )}
-                            {(order.status === "pending" || order.status === "open") &&
+                            {(order.status === "pending" ||
+                              order.status === "open" ||
+                              // A partner-tab invoice is "completed" at once; cancelling it takes it off the partner's account.
+                              (order.status === "completed" && onPartnerTab && order.order_payments.length === 0)) &&
                               (can("pos.cancel_order") || can("pos.create_order")) && (
                                 <Button
                                   size="sm"
@@ -1139,6 +1143,9 @@ function OrdersPage() {
                               editable={canExportShifts}
                               lang={lang}
                             />
+                            {row.status === "closed" && (can("shifts.adjust_cash") || Boolean(me?.isRoot || me?.roleNames.includes("Super Admin"))) && (
+                              <ShiftRefundBearersButton shiftId={row.id} currency={currency} lang={lang} />
+                            )}
                           </TableCell>
                           <TableCell className="w-32 text-center">
                             <Badge variant={row.status === "open" ? "secondary" : "outline"}>

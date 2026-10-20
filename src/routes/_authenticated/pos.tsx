@@ -56,6 +56,7 @@ import { softOpeningImage, type ServeType } from "@/lib/soft-opening-catalog";
 import { CustomerSuggestionList } from "@/modules/operations/CustomerSuggestionList";
 import { customerLookupTerm, usePosCustomerLookup } from "@/modules/operations/pos-customer-lookup";
 import { addTender, singleTender, summarizePayments, toServerPayments, type TenderRow } from "@/modules/operations/payment-split";
+import { toggleExtraOnOneUnit } from "@/modules/operations/cart-extras";
 import { SoldOutToggle } from "@/modules/operations/SoldOutToggle";
 import { BarLowStockAlert, LowStockCardBadge, useBarLowStock } from "@/modules/supply/bar-low-stock";
 import {
@@ -446,25 +447,10 @@ function PosPage() {
   });
   const extrasLine = cart.find((l) => l.key === extrasLineKey) ?? null;
   function toggleLineExtra(mod: CartModifier) {
-    const target = cart.find((l) => l.key === extrasLineKey);
-    if (!target) return;
-    const nextMods = target.modifiers.some((m) => m.option_id === mod.option_id)
-      ? target.modifiers.filter((m) => m.option_id !== mod.option_id)
-      : [...target.modifiers, mod];
-    // A line with several units: the extra goes on ONE unit only — split it into its own line.
-    if (target.quantity > 1) {
-      const newKey = `${target.key}-x${Date.now()}`;
-      setCart((prev) =>
-        prev.flatMap((l) =>
-          l.key !== target.key
-            ? [l]
-            : [{ ...l, quantity: l.quantity - 1 }, { ...l, key: newKey, quantity: 1, modifiers: nextMods }],
-        ),
-      );
-      setExtrasLineKey(newKey);
-      return;
-    }
-    setCart((prev) => prev.map((l) => (l.key !== target.key ? l : { ...l, modifiers: nextMods })));
+    if (!extrasLineKey) return;
+    const result = toggleExtraOnOneUnit(cart, extrasLineKey, mod, `${extrasLineKey.split("-x")[0]}-x${Date.now()}`);
+    setCart(result.cart);
+    setExtrasLineKey(result.key);
   }
 
   const productImages = useProductImageUrls(

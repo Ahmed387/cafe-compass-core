@@ -7,10 +7,13 @@ import { Input } from "@/components/ui/input";
 import venueAsset from "@/assets/menu-bg.png.asset.json";
 import { formatMoney } from "@/lib/format";
 import { CAN_SURCHARGE, softOpeningImage } from "@/lib/soft-opening-catalog";
-import { getSoftOpeningCatalog } from "@/lib/soft-opening.functions";
+import { getMenuOffers, getSoftOpeningCatalog } from "@/lib/soft-opening.functions";
 
 export const Route = createFileRoute("/menu")({
-  loader: () => getSoftOpeningCatalog(),
+  loader: async () => {
+    const [categories, offers] = await Promise.all([getSoftOpeningCatalog(), getMenuOffers().catch(() => [])]);
+    return { categories, offers };
+  },
   head: () => ({
     meta: [
       { title: "المنيو — 20s Specialty Coffee" },
@@ -31,7 +34,7 @@ function SoftMenuError() {
 }
 
 function SoftMenuPage() {
-  const categories = Route.useLoaderData();
+  const { categories, offers } = Route.useLoaderData();
   const [query, setQuery] = useState("");
   const [lang, setLang] = useState<"ar" | "en">("ar");
   const ar = lang === "ar";
@@ -68,6 +71,25 @@ function SoftMenuPage() {
           <Button onClick={browse} size="lg" className="mt-8 bg-soft-accent text-soft-accent-foreground shadow-soft-glow hover:bg-soft-accent/90"><Coffee className="size-5" />{ar ? "تصفح قائمة المشروبات والمأكولات" : "Browse drinks & food"}<ChevronDown className="size-5" /></Button>
         </div>
       </section>
+
+      {offers.length > 0 && (
+        <section aria-labelledby="menu-offers" className="mx-auto max-w-6xl px-4 pt-10 sm:px-6">
+          <h2 id="menu-offers" className="mb-4 text-2xl font-bold text-soft-gold sm:text-3xl">{ar ? "عروض النهارده" : "Today's offers"}</h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {offers.map((offer) => (
+              <article key={offer.id} className="rounded-md border border-soft-accent/50 bg-soft-surface p-4 shadow-soft-card">
+                <h3 className="font-bold">{offer.title}</h3>
+                {(offer.product_name_ar || offer.product_name) && <p className="mt-1 text-xs text-soft-muted">{ar ? offer.product_name_ar || offer.product_name : offer.product_name}</p>}
+                <p className="mt-3 flex items-baseline gap-2">
+                  <span className="text-xl font-extrabold text-soft-accent">{formatMoney(offer.offer_price, "EGP", lang)}</span>
+                  {offer.base_price > offer.offer_price && <span className="text-sm text-soft-muted line-through">{formatMoney(offer.base_price, "EGP", lang)}</span>}
+                </p>
+                {offer.ends_at && <p className="mt-1 text-[11px] text-soft-muted">{ar ? `لحد ${offer.ends_at}` : `Until ${offer.ends_at}`}</p>}
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section id="catalog" className="scroll-mt-0">
         <div className="sticky top-0 z-30 border-b border-soft-border bg-soft-night/95 backdrop-blur-xl">
