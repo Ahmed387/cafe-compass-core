@@ -54,6 +54,8 @@ CREATE OR REPLACE FUNCTION pg_temp.patch_fn(_sig regprocedure, _old text, _new t
 RETURNS void LANGUAGE plpgsql AS $$
 DECLARE _def text := pg_get_functiondef(_sig);
 BEGIN
+  -- Editors on Windows paste CRLF line ends; function sources use LF.
+  _old := replace(_old, E'\r', ''); _new := replace(_new, E'\r', '');
   IF position(_new IN _def) > 0 THEN RAISE NOTICE '% already patched', _sig; RETURN; END IF;
   IF position(_old IN _def) = 0 THEN RAISE EXCEPTION 'Expected text not found in %: %', _sig, left(_old, 60); END IF;
   IF position(_old IN substr(_def, position(_old IN _def) + 1)) > 0 THEN
