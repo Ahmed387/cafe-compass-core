@@ -67,6 +67,7 @@ function CashbackPage() {
   const canView = can("loyalty.view") || isSuperAdmin;
 
   const [search, setSearch] = useState("");
+  const [walletOnly, setWalletOnly] = useState(false);
   const [page, setPage] = useState(0);
   const [historyFor, setHistoryFor] = useState<Customer | null>(null);
   const [editFor, setEditFor] = useState<Customer | null>(null);
@@ -83,7 +84,7 @@ function CashbackPage() {
   });
 
   const customers = useQuery({
-    queryKey: ["cashback-customers", search, page],
+    queryKey: ["cashback-customers", search, page, walletOnly],
     enabled: canView,
     queryFn: async () => {
       let query = supabase
@@ -93,6 +94,7 @@ function CashbackPage() {
         .order("wallet_balance", { ascending: false })
         .order("created_at", { ascending: true })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+      if (walletOnly) query = query.gt("wallet_balance", 0);
       const term = search.trim().slice(0, 80).replace(/[%_,()]/g, " ").trim();
       if (term) query = query.or(`name.ilike.%${term}%,phone.ilike.%${term}%,code.ilike.%${term}%,barcode.ilike.%${term}%`);
       const { data, error, count } = await query;
@@ -174,8 +176,13 @@ function CashbackPage() {
       {/* Visit stamps were retired on 2026-10-20: cashback is the one loyalty rule. Their data stays. */}
 
       <section className="space-y-3">
-        <Input placeholder={ar ? "دوّر بالاسم أو الموبايل أو الكود" : "Search name, phone or code"} value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(0); }} className="max-w-sm" />
+        <div className="flex flex-wrap items-center gap-2">
+          <Input placeholder={ar ? "دوّر بالاسم أو الموبايل أو الكود" : "Search name, phone or code"} value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }} className="max-w-sm" />
+          <Button size="sm" variant={walletOnly ? "default" : "outline"} onClick={() => { setWalletOnly((v) => !v); setPage(0); }}>
+            <Wallet className="me-1 size-4" />{ar ? "اللي معاهم فلوس بس" : "With wallet money only"}
+          </Button>
+        </div>
         {rows.length === 0 ? (
           <EmptyState message={ar ? "مفيش عملاء" : "No customers"} />
         ) : (
@@ -186,6 +193,7 @@ function CashbackPage() {
                   <TableHead>{t("common.name")}</TableHead>
                   <TableHead>{t("common.phone")}</TableHead>
                   <TableHead className="text-end">{ar ? "المحفظة" : "Wallet"}</TableHead>
+                  <TableHead className="text-center">{ar ? "وصل لمستوى" : "Level reached"}</TableHead>
                   <TableHead className="min-w-40">{ar ? "للمكافأة الجاية" : "To next reward"}</TableHead>
                   <TableHead className="text-center">{ar ? "الزيارات" : "Visits"}</TableHead>
                   <TableHead className="text-end">{t("common.actions")}</TableHead>
@@ -201,6 +209,13 @@ function CashbackPage() {
                       <TableCell className="font-medium">{row.name}<span className="block font-mono text-xs text-muted-foreground">{row.code}</span></TableCell>
                       <TableCell>{row.phone ?? "—"}</TableCell>
                       <TableCell className="text-end"><Badge variant="secondary" className="tabular-nums">{money(row.wallet_balance)}</Badge></TableCell>
+                      <TableCell className="text-center">
+                        {Number(row.cashback_level ?? 0) > 0 ? (
+                          <Badge>{ar ? `مستوى ${row.cashback_level}` : `Level ${row.cashback_level}`}</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">{ar ? "لسه" : "Not yet"}</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {cfg?.enabled && next ? (
                           <div className="space-y-1">
