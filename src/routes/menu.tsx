@@ -4,7 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import venueAsset from "@/assets/menu-bg.png.asset.json";
+import bambooSilhouette from "@/assets/venue/bamboo-silhouette.jpg";
+import entrance from "@/assets/venue/entrance.jpg";
+import kiosk from "@/assets/venue/kiosk.jpg";
+import loungeBamboo from "@/assets/venue/lounge-bamboo.jpg";
+import terrace from "@/assets/venue/terrace.jpg";
+import { MenuMusic } from "@/components/menu/MenuMusic";
 import { formatMoney } from "@/lib/format";
 import { CAN_SURCHARGE, softOpeningImage } from "@/lib/soft-opening-catalog";
 import { getMenuOffers, getSoftOpeningCatalog } from "@/lib/soft-opening.functions";
@@ -31,6 +36,68 @@ export const Route = createFileRoute("/menu")({
 
 function SoftMenuError() {
   return <main className="soft-menu-theme flex min-h-screen items-center justify-center bg-soft-night p-8 text-soft-foreground"><p>المنيو غير متاح الآن، حاول مرة أخرى بعد قليل.</p></main>;
+}
+
+// The first photo is the hero background; the rest of the venue follows it.
+const VENUE_PHOTOS = [
+  { src: bambooSilhouette, ar: "ظل على حيطة البامبو في 20s", en: "A silhouette on the 20s bamboo wall" },
+  { src: entrance, ar: "بوابة 20s Specialty Coffee المضيئة", en: "The lit 20s Specialty Coffee gate" },
+  { src: kiosk, ar: "بار 20s على الكورنيش السياحي بالمنيا الجديدة", en: "The 20s bar at the New Minya tourist corniche" },
+  { src: terrace, ar: "التراس تحت الشجرة بإضاءة دافئة", en: "The terrace under the tree in warm light" },
+  { src: loungeBamboo, ar: "جلسة جنب سور البامبو", en: "Seating by the bamboo fence" },
+];
+const SLIDE_MS = 7000;
+
+/** Cinematic hero: each venue photo drifts right to left, then cross-fades to the next. */
+function VenueSlideshow({ ar }: { ar: boolean }) {
+  const [index, setIndex] = useState(0);
+  // The outgoing photo keeps drifting while it fades, so it never snaps back.
+  const [prev, setPrev] = useState(-1);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = window.setInterval(() => {
+      setIndex((i) => {
+        setPrev(i);
+        return (i + 1) % VENUE_PHOTOS.length;
+      });
+    }, SLIDE_MS);
+    return () => window.clearInterval(id);
+  }, []);
+  return (
+    <div className="absolute inset-0 overflow-hidden" aria-roledescription="carousel">
+      {VENUE_PHOTOS.map((photo, i) => (
+        <img
+          key={photo.src}
+          src={photo.src}
+          alt={i === index ? (ar ? photo.ar : photo.en) : ""}
+          aria-hidden={i !== index}
+          fetchPriority={i === 0 ? "high" : "low"}
+          loading={i === 0 ? "eager" : "lazy"}
+          className={`absolute inset-0 size-full object-cover transition-opacity duration-[1500ms] ${i === index || i === prev ? "soft-menu-drift" : ""} ${i === index ? "opacity-100" : "opacity-0"}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** An endless strip of the venue photos moving right to left. */
+function VenueStrip({ ar }: { ar: boolean }) {
+  return (
+    <section dir="ltr" aria-label={ar ? "صور المكان" : "The venue"} className="overflow-hidden border-y border-soft-border bg-soft-night py-6">
+      <div className="soft-menu-marquee flex w-max gap-4">
+        {[...VENUE_PHOTOS, ...VENUE_PHOTOS, ...VENUE_PHOTOS, ...VENUE_PHOTOS].map((photo, i) => (
+          <img
+            key={i}
+            src={photo.src}
+            alt={i < VENUE_PHOTOS.length ? (ar ? photo.ar : photo.en) : ""}
+            aria-hidden={i >= VENUE_PHOTOS.length}
+            loading="lazy"
+            className="h-56 w-44 shrink-0 rounded-md object-cover shadow-soft-card sm:h-72 sm:w-60"
+          />
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function SoftMenuPage() {
@@ -60,7 +127,7 @@ function SoftMenuPage() {
   return (
     <main dir={ar ? "rtl" : "ltr"} className="soft-menu-theme min-h-screen bg-soft-night text-soft-foreground">
       <section className="relative flex min-h-[92svh] items-end overflow-hidden">
-        <img src={venueAsset.url} alt="واجهة 20s Specialty Coffee الخشبية بإضاءة دافئة" className="absolute inset-0 size-full object-cover" fetchPriority="high" />
+        <VenueSlideshow ar={ar} />
         <div className="absolute inset-0 bg-soft-hero" />
         <div className="soft-menu-shimmer absolute inset-0" aria-hidden />
         <Button size="sm" variant="outline" onClick={() => setLang(ar ? "en" : "ar")} className="absolute end-4 top-4 z-10 border-soft-gold/50 bg-soft-night/70 text-soft-gold backdrop-blur hover:bg-soft-surface"><Languages className="size-4" />{ar ? "English" : "العربية"}</Button>
@@ -71,6 +138,8 @@ function SoftMenuPage() {
           <Button onClick={browse} size="lg" className="mt-8 bg-soft-accent text-soft-accent-foreground shadow-soft-glow hover:bg-soft-accent/90"><Coffee className="size-5" />{ar ? "تصفح قائمة المشروبات والمأكولات" : "Browse drinks & food"}<ChevronDown className="size-5" /></Button>
         </div>
       </section>
+
+      <VenueStrip ar={ar} />
 
       {offers.length > 0 && (
         <section aria-labelledby="menu-offers" className="mx-auto max-w-6xl px-4 pt-10 sm:px-6">
@@ -119,6 +188,7 @@ function SoftMenuPage() {
         </div>
       </section>
       <footer className="border-t border-soft-border px-5 py-10 text-center"><p className="font-display text-xl font-bold text-soft-gold">20s SPECIALTY COFFEE</p><p className="mt-2 text-xs text-soft-muted">{ar ? "الأسعار بالجنيه المصري" : "Prices in Egyptian pounds"}</p></footer>
+      <MenuMusic ar={ar} />
     </main>
   );
 }
