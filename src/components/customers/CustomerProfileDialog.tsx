@@ -79,7 +79,7 @@ export function CustomerProfileDialog({
           .limit(200),
         supabase
           .from("partners")
-          .select("id, name, status, partner_tab_orders(total_amount, is_settled)")
+          .select("id, name, status, partner_tab_orders(total_amount, settled_amount, is_settled)")
           .eq("customer_id", id)
           .maybeSingle(),
       ]);
@@ -98,10 +98,11 @@ export function CustomerProfileDialog({
       const partner = partnerRes.error ? null : partnerRes.data;
       const pendingTab = ((partner?.partner_tab_orders ?? []) as Array<{
         total_amount: number;
+        settled_amount: number;
         is_settled: boolean;
       }>)
         .filter((row) => !row.is_settled)
-        .reduce((sum, row) => sum + Number(row.total_amount), 0);
+        .reduce((sum, row) => sum + Math.max(Number(row.total_amount) - Number(row.settled_amount ?? 0), 0), 0);
 
       return {
         customer: customerRes.data,
@@ -142,7 +143,7 @@ export function CustomerProfileDialog({
             )}
             {data?.partner && (
               <Badge className="border border-amber-400/60 bg-gradient-to-r from-amber-400/20 to-yellow-500/20 px-2.5 py-1 font-bold text-amber-900 shadow-sm dark:text-amber-300">
-                {t("cust.partnerBadge")}
+                {data.pendingTab > 0 ? t("cust.partnerWithTab") : t("cust.partnerBadge")}
               </Badge>
             )}
           </DialogTitle>

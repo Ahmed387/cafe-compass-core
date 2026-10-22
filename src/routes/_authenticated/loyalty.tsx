@@ -101,6 +101,29 @@ function CashbackPage() {
     },
   });
 
+  // Customers who are also partners: their tab invoices are "a partner with an
+  // invoice on their account", never visits (owner's rule 2026-10-22).
+  const partnerCustomers = useQuery({
+    queryKey: ["loyalty-partner-customers"],
+    enabled: canView,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("partners")
+        .select("customer_id, partner_tab_orders(total_amount, settled_amount, is_settled)")
+        .not("customer_id", "is", null);
+      if (error) throw error;
+      const open = new Map<string, number>();
+      for (const row of data ?? []) {
+        const tabs = (row.partner_tab_orders ?? []) as Array<{ total_amount: number; settled_amount: number; is_settled: boolean }>;
+        open.set(
+          row.customer_id as string,
+          tabs.filter((tab) => !tab.is_settled).reduce((sum, tab) => sum + Math.max(Number(tab.total_amount) - Number(tab.settled_amount ?? 0), 0), 0),
+        );
+      }
+      return open;
+    },
+  });
+
   // Money the café owes customers in wallets (a liability until they spend it).
   const liability = useQuery({
     queryKey: ["cashback-liability"],
@@ -181,6 +204,7 @@ function CashbackPage() {
                 {rows.map((row) => {
                   const target = Number(cfg?.target_amount ?? 0);
                   const progress = Math.max(Number(row.cashback_progress), 0);
+                  const partnerTab = partnerCustomers.data?.get(row.id);
                   return (
                     <TableRow key={row.id}>
                       <TableCell className="font-medium">{row.name}<span className="block font-mono text-xs text-muted-foreground">{row.code}</span></TableCell>
@@ -194,7 +218,15 @@ function CashbackPage() {
                           </div>
                         ) : <span className="text-xs text-muted-foreground">—</span>}
                       </TableCell>
-                      <TableCell className="text-center tabular-nums">{row.visits}</TableCell>
+                      <TableCell className="text-center tabular-nums">
+                        {partnerTab === undefined ? row.visits : (
+                          <Badge variant="outline" className="whitespace-nowrap border-amber-400/60 text-amber-800 dark:text-amber-300">
+                            {partnerTab > 0
+                              ? `${ar ? "شريك وعليه فاتورة" : "Partner, open tab"} · ${money(partnerTab)}`
+                              : ar ? "شريك" : "Partner"}
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="space-x-2 whitespace-nowrap text-end">
                         <Button size="sm" variant="secondary" onClick={() => setHistoryFor(row)}>{ar ? "الحركات" : "History"}</Button>
                         <Button size="sm" variant="outline" onClick={() => printCard(row)}>{ar ? "اطبع الكارت" : "Print card"}</Button>
