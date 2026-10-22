@@ -915,6 +915,7 @@ export type Database = {
       customers: {
         Row: {
           barcode: string
+          cashback_level: number
           cashback_progress: number
           code: string
           company_id: string
@@ -934,6 +935,7 @@ export type Database = {
         }
         Insert: {
           barcode: string
+          cashback_level?: number
           cashback_progress?: number
           code: string
           company_id: string
@@ -953,6 +955,7 @@ export type Database = {
         }
         Update: {
           barcode?: string
+          cashback_level?: number
           cashback_progress?: number
           code?: string
           company_id?: string

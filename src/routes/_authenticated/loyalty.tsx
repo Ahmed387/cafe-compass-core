@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Coins, Gift, RotateCcw, Save, Target, UserPlus, Wallet } from "lucide-react";
+import { Coins, Gift, Plus, RotateCcw, Save, Target, Trash2, UserPlus, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -20,7 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatMoney, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
-import { printCustomerCard } from "@/lib/loyalty";
+import { nextTier, parseCashbackConfig, tierError, type CashbackConfig } from "@/lib/cashback-tiers";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 
 export const Route = createFileRoute("/_authenticated/loyalty")({
@@ -45,14 +45,14 @@ type Customer = {
   barcode: string;
   wallet_balance: number;
   cashback_progress: number;
+  /** 0-based cashback level the customer is working toward. */
+  cashback_level: number;
   total_spent: number;
   visits: number;
   /** Visit stamps toward the next free drink. */
   points_balance: number | null;
   last_visit_at: string | null;
 };
-
-type CashbackConfig = { enabled: boolean; target_amount: number; reward_amount: number };
 
 const PAGE_SIZE = 25;
 
@@ -78,7 +78,7 @@ function CashbackPage() {
     queryFn: async () => {
       const { data, error } = await supabase.rpc("cashback_settings");
       if (error) throw error;
-      return data as unknown as CashbackConfig;
+      return parseCashbackConfig(data);
     },
   });
 
@@ -88,7 +88,7 @@ function CashbackPage() {
     queryFn: async () => {
       let query = supabase
         .from("customers")
-        .select("id, code, name, phone, barcode, wallet_balance, cashback_progress, total_spent, visits, points_balance, last_visit_at", { count: "exact" })
+        .select("id, code, name, phone, barcode, wallet_balance, cashback_progress, cashback_level, total_spent, visits, points_balance, last_visit_at", { count: "exact" })
         .eq("is_active", true)
         .order("wallet_balance", { ascending: false })
         .order("created_at", { ascending: true })
@@ -139,27 +139,6 @@ function CashbackPage() {
   const rows = customers.data?.rows ?? [];
   const cfg = config.data;
 
-  const printCard = async (row: Customer) => {
-    const ok = await printCustomerCard({
-      companyName: me?.company?.name ?? "20s Coffee",
-      name: row.name,
-      code: row.code,
-      barcode: row.barcode,
-      wallet: Number(row.wallet_balance),
-      currency,
-      lang,
-      url: `${window.location.origin}/c/${row.barcode}`,
-      labels: {
-        title: ar ? "كارت العميل" : "Customer card",
-        hint: ar ? "اعرض الكارت عند الكاشير عشان تجمع كاش باك" : "Show this card at the till to collect cashback",
-        wallet: ar ? "رصيد الكاش باك" : "Cashback balance",
-        id: ar ? "رقم العميل" : "ID",
-      },
-    });
-    if (!ok) toast.error(t("orders.printBlocked"));
-  };
-
-
   return (
     <div className="space-y-5">
       <PageHeader
@@ -170,16 +149,28 @@ function CashbackPage() {
 
       <KpiGrid cols={3}>
         <KpiCard label={ar ? "القاعدة الحالية" : "Current rule"} icon={<Target className="size-4" />}
-          value={cfg ? (cfg.enabled ? (ar ? `كل ${money(cfg.target_amount)} ← ${money(cfg.reward_amount)}` : `Every ${money(cfg.target_amount)} → ${money(cfg.reward_amount)}`) : ar ? "متوقف" : "Off") : "—"}
+          value={cfg ? (cfg.enabled ? (ar ? `شغّال · ${cfg.tiers.length} ${cfg.tiers.length === 1 ? "مستوى" : "مستويات"}` : `On · ${cfg.tiers.length} level${cfg.tiers.length === 1 ? "" : "s"}`) : ar ? "متوقف" : "Off") : "—"}
           tone={cfg?.enabled ? "good" : undefined}
-          formula={ar ? "العميل كل ما مشترياته توصل للمبلغ ده، بيتحط في محفظته الكاش باك. والباقي بيتراكم للمرة الجاية." : "Every time spend reaches the target, the reward goes into the wallet; the rest keeps accumulating."} />
+          formula={ar ? "متوقف يعني محدش بياخد كاش باك دلوقتي. شغّال يعني كل ما مشتريات العميل توصل لمستوى، مكافأته بتنزل في محفظته لوحدها." : "Off means nobody earns cashback now. On means each level a customer reaches pays its reward into their wallet."} />
         <KpiCard label={ar ? "فلوس في محافظ العملاء" : "Owed in customer wallets"} icon={<Wallet className="size-4" />}
           value={money(liability.data)} tone="warn"
-          formula={ar ? "مجموع أرصدة الكاش باك اللي العملاء لسه ماصرفوهاش — ده التزام على المكان لحد ما يستخدموه." : "Cashback customers haven't spent yet — a liability until used."} />
+          formula={ar ? "مجموع الفلوس اللي في محافظ كل العملاء ولسه ماستخدموهاش في فواتيرهم." : "Total cashback in every customer's wallet that hasn't been used on a bill yet."} />
         <KpiCard label={ar ? "عدد العملاء" : "Customers"} icon={<Gift className="size-4" />} value={customers.data?.total ?? "—"} />
       </KpiGrid>
 
-      {isSuperAdmin && cfg && <CashbackRuleCard config={cfg} lang={lang} money={money} onSaved={() => qc.invalidateQueries({ queryKey: ["cashback-settings"] })} />}
+      {isSuperAdmin && cfg && (
+        <CashbackRuleCard
+          config={cfg}
+          lang={lang}
+          money={money}
+          walletTotal={liability.data ?? 0}
+          onSaved={() => {
+            qc.invalidateQueries({ queryKey: ["cashback-settings"] });
+            qc.invalidateQueries({ queryKey: ["cashback-customers"] });
+            qc.invalidateQueries({ queryKey: ["cashback-liability"] });
+          }}
+        />
+      )}
       {/* Visit stamps were retired on 2026-10-20: cashback is the one loyalty rule. Their data stays. */}
 
       <section className="space-y-3">
@@ -202,8 +193,8 @@ function CashbackPage() {
               </TableHeader>
               <TableBody>
                 {rows.map((row) => {
-                  const target = Number(cfg?.target_amount ?? 0);
                   const progress = Math.max(Number(row.cashback_progress), 0);
+                  const next = cfg ? nextTier(cfg.tiers, progress, Number(row.cashback_level ?? 0)) : null;
                   const partnerTab = partnerCustomers.data?.get(row.id);
                   return (
                     <TableRow key={row.id}>
@@ -211,10 +202,13 @@ function CashbackPage() {
                       <TableCell>{row.phone ?? "—"}</TableCell>
                       <TableCell className="text-end"><Badge variant="secondary" className="tabular-nums">{money(row.wallet_balance)}</Badge></TableCell>
                       <TableCell>
-                        {cfg?.enabled && target > 0 ? (
+                        {cfg?.enabled && next ? (
                           <div className="space-y-1">
-                            <Progress value={Math.min(progress / target, 1) * 100} className="h-1.5" />
-                            <p className="text-xs tabular-nums text-muted-foreground">{ar ? "فاضل" : "Left"} {money(Math.max(target - progress, 0))}</p>
+                            <Progress value={next.done * 100} className="h-1.5" />
+                            <p className="text-xs tabular-nums text-muted-foreground">
+                              {cfg.tiers.length > 1 && (ar ? `مستوى ${next.index + 1} · ` : `Level ${next.index + 1} · `)}
+                              {ar ? "فاضل" : "Left"} {money(next.left)} {ar ? "وياخد" : "to get"} {money(next.tier.reward)}
+                            </p>
                           </div>
                         ) : <span className="text-xs text-muted-foreground">—</span>}
                       </TableCell>
@@ -229,10 +223,9 @@ function CashbackPage() {
                       </TableCell>
                       <TableCell className="space-x-2 whitespace-nowrap text-end">
                         <Button size="sm" variant="secondary" onClick={() => setHistoryFor(row)}>{ar ? "الحركات" : "History"}</Button>
-                        <Button size="sm" variant="outline" onClick={() => printCard(row)}>{ar ? "اطبع الكارت" : "Print card"}</Button>
                         {isSuperAdmin && <Button size="sm" variant="outline" onClick={() => setEditFor(row)}>{ar ? "تعديل" : "Edit"}</Button>}
-                        {isSuperAdmin && Number(row.cashback_progress) > 0 && (
-                          <ResetCashbackButton customerId={row.id} lang={lang} onDone={() => qc.invalidateQueries({ queryKey: ["loyalty-customers"] })} />
+                        {isSuperAdmin && (Number(row.cashback_progress) > 0 || Number(row.cashback_level) > 0) && (
+                          <ResetCashbackButton customerId={row.id} lang={lang} onDone={() => qc.invalidateQueries({ queryKey: ["cashback-customers"] })} />
                         )}
                       </TableCell>
                     </TableRow>
@@ -252,67 +245,141 @@ function CashbackPage() {
   );
 }
 
-function CashbackRuleCard({ config, lang, money, onSaved }: {
-  config: CashbackConfig; lang: "ar" | "en"; money: (v: number) => string; onSaved: () => void;
+type TierDraft = { target: string; reward: string };
+
+function CashbackRuleCard({ config, lang, money, walletTotal, onSaved }: {
+  config: CashbackConfig; lang: "ar" | "en"; money: (v: number) => string; walletTotal: number; onSaved: () => void;
 }) {
   const ar = lang === "ar";
+  const toDraft = (c: CashbackConfig): TierDraft[] =>
+    c.tiers.length > 0 ? c.tiers.map((t) => ({ target: String(t.target), reward: String(t.reward) })) : [{ target: "", reward: "" }];
   const [enabled, setEnabled] = useState(config.enabled);
-  const [target, setTarget] = useState(String(config.target_amount));
-  const [reward, setReward] = useState(String(config.reward_amount));
-  useEffect(() => { setEnabled(config.enabled); setTarget(String(config.target_amount)); setReward(String(config.reward_amount)); }, [config]);
+  const [tiers, setTiers] = useState<TierDraft[]>(toDraft(config));
+  useEffect(() => { setEnabled(config.enabled); setTiers(toDraft(config)); }, [config]);
+
+  const parsed = tiers.map((t) => ({ target: Number(t.target), reward: Number(t.reward) }));
+  const problem = tierError(parsed, lang);
+  // Turning it off never needs valid numbers: the last levels are kept.
+  const canSave = !problem || !enabled;
 
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.rpc("set_cashback_settings", { _enabled: enabled, _target_amount: Number(target), _reward_amount: Number(reward) });
+      const { error } = await supabase.rpc("set_cashback_tiers" as never, {
+        _enabled: enabled,
+        _tiers: problem ? null : parsed,
+      } as never);
       if (error) throw error;
     },
-    onSuccess: () => { toast.success(ar ? "اتحفظت قاعدة الكاش باك" : "Cashback rule saved"); onSaved(); },
+    onSuccess: () => { toast.success(ar ? "اتحفظت مستويات الكاش باك" : "Cashback levels saved"); onSaved(); },
     onError: (e) => toast.error(friendlyError(e, lang)),
   });
-  const t = Number(target), r = Number(reward);
-  const valid = t > 0 && r > 0 && r < t;
-  // Turning it off never needs valid numbers: the last target and reward are kept.
-  const canSave = valid || !enabled;
+  const setTier = (i: number, key: keyof TierDraft, value: string) =>
+    setTiers((prev) => prev.map((t, j) => (j === i ? { ...t, [key]: value } : t)));
 
   return (
     <section className="card-surface rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
-          <SectionTitle icon={Coins}>{ar ? "قاعدة الكاش باك" : "Cashback rule"}</SectionTitle>
-          <InfoTip title={ar ? "ليه الكاش باك؟" : "Why cashback?"}>
+          <SectionTitle icon={Coins}>{ar ? "مستويات الكاش باك" : "Cashback levels"}</SectionTitle>
+          <InfoTip title={ar ? "إزاي بيشتغل؟" : "How does it work?"}>
             {ar
-              ? "بيشجع العميل يرجع تاني: كل ما يصرف المبلغ اللي تحدده، بياخد مبلغ ثابت في محفظته يستخدمه في أي فاتورة جاية. أوضح من النقاط وأسهل للكاشير."
-              : "Brings customers back: each time they spend your target, a fixed amount lands in their wallet for any later bill. Simpler than points."}
+              ? "مشتريات العميل بتتجمع. كل ما يوصل لتارجت مستوى، مكافأة المستوى ده بتنزل في محفظته لوحدها. بعد آخر مستوى بيبدأ من الأول. الفلوس دي بتتصرف بس في فاتورة العميل نفسه، ومش بتتسحب كاش."
+              : "Spend builds up. Each level target reached pays that level's reward into the wallet automatically. After the last level it starts again. Wallet money only pays the customer's own bills, never cash."}
           </InfoTip>
         </div>
         <label className="flex items-center gap-2 text-sm">{ar ? "مفعّل" : "Enabled"}<Switch checked={enabled} onCheckedChange={setEnabled} /></label>
       </div>
-      <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-        <div className="space-y-1">
-          <Label htmlFor="cb-target">{ar ? "كل ما العميل يصرف" : "Every time the customer spends"}</Label>
-          <Input id="cb-target" inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} />
+
+      <div className="space-y-2">
+        <div className="hidden grid-cols-[4rem_1fr_1fr_2.5rem] gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid">
+          <span>{ar ? "المستوى" : "Level"}</span>
+          <span>{ar ? "لما مشترياته توصل" : "When spend reaches"}</span>
+          <span>{ar ? "ياخد في محفظته" : "Gets in wallet"}</span>
+          <span />
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="cb-reward">{ar ? "ياخد في محفظته" : "They get in their wallet"}</Label>
-          <Input id="cb-reward" inputMode="decimal" value={reward} onChange={(e) => setReward(e.target.value)} />
+        {tiers.map((tier, i) => (
+          <div key={i} className="grid grid-cols-[4rem_1fr_1fr_2.5rem] items-center gap-2">
+            <span className="text-sm font-semibold">{ar ? `مستوى ${i + 1}` : `Level ${i + 1}`}</span>
+            <Input aria-label={ar ? `تارجت المستوى ${i + 1}` : `Level ${i + 1} target`} inputMode="decimal" value={tier.target}
+              onChange={(e) => setTier(i, "target", e.target.value)} />
+            <Input aria-label={ar ? `مكافأة المستوى ${i + 1}` : `Level ${i + 1} reward`} inputMode="decimal" value={tier.reward}
+              onChange={(e) => setTier(i, "reward", e.target.value)} />
+            <Button type="button" size="icon" variant="ghost" disabled={tiers.length === 1}
+              aria-label={ar ? "شيل المستوى" : "Remove level"}
+              onClick={() => setTiers((prev) => prev.filter((_, j) => j !== i))}>
+              <Trash2 className="size-4" />
+            </Button>
+          </div>
+        ))}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <Button type="button" size="sm" variant="outline" disabled={tiers.length >= 10}
+            onClick={() => setTiers((prev) => [...prev, { target: "", reward: "" }])}>
+            <Plus className="me-1 size-4" />{ar ? "ضيف مستوى" : "Add level"}
+          </Button>
+          <Button disabled={!canSave || save.isPending} onClick={() => save.mutate()}><Save className="me-1 size-4" />{ar ? "احفظ" : "Save"}</Button>
         </div>
-        <Button disabled={!canSave || save.isPending} onClick={() => save.mutate()}><Save className="me-1 size-4" />{ar ? "احفظ" : "Save"}</Button>
+        <p className={`text-xs ${problem && enabled ? "text-destructive" : "text-muted-foreground"}`}>
+          {problem
+            ? problem
+            : ar
+              ? `مثال: عميل مشترياته وصلت ${money(parsed[0]!.target)} ياخد ${money(parsed[0]!.reward)}${parsed[1] ? `، ولما توصل ${money(parsed[1].target)} ياخد ${money(parsed[1].reward)} كمان` : ""}. بعد آخر مستوى بيبدأ من الأول.`
+              : `E.g. at ${money(parsed[0]!.target)} spend the customer gets ${money(parsed[0]!.reward)}${parsed[1] ? `, at ${money(parsed[1].target)} another ${money(parsed[1].reward)}` : ""}. After the last level it starts again.`}
+        </p>
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
-        <ResetCashbackButton lang={lang} onDone={onSaved} />
-        <span className="text-xs text-muted-foreground">
-          {ar
-            ? "بيرجّع العدّاد للصفر عند كل العملاء. الفلوس اللي في المحافظ مش بتتلمس، ومحدش يقدر يسحبها كاش: بتتصرف في فواتير بس."
-            : "Restarts every customer's progress at zero. Wallet money stays, and it can only pay invoices, never be cashed out."}
-        </span>
+
+      <div className="mt-3 space-y-2 border-t pt-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <ResetCashbackButton lang={lang} onDone={onSaved} />
+          <span className="text-xs text-muted-foreground">
+            {ar ? "بيرجّع مشتريات كل العملاء للصفر ويبدأوا من المستوى الأول. فلوس المحافظ زي ما هي." : "Restarts everyone's spend at zero and level 1. Wallet money stays."}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <ZeroWalletsButton lang={lang} total={walletTotal} money={money} onDone={onSaved} />
+          <span className="text-xs text-muted-foreground">
+            {ar ? "بيخلي رصيد كل المحافظ صفر. كل خصم بيتسجل في حركات العميل باسمك، ومفيش حاجة بتتمسح." : "Sets every wallet to zero. Each deduction is logged in the customer's history under your name; nothing is deleted."}
+          </span>
+        </div>
       </div>
-      <p className="mt-3 text-xs text-muted-foreground">
-        {valid
-          ? ar ? `يعني كاش باك ${((r / t) * 100).toFixed(1)}٪ من المشتريات. مثال: عميل صرف ${money(t * 2.5)} ← ياخد ${money(r * 2)} والباقي ${money(t / 2)} بيتراكم للمرة الجاية.`
-               : `That's ${((r / t) * 100).toFixed(1)}% back. E.g. spending ${money(t * 2.5)} → ${money(r * 2)} in the wallet, ${money(t / 2)} carries over.`
-          : ar ? "المكافأة لازم تكون أقل من مبلغ الهدف." : "The reward must be smaller than the target."}
-      </p>
     </section>
+  );
+}
+
+/** Zero every customer wallet (Super Admin). Two taps, no browser dialog. */
+function ZeroWalletsButton({ lang, total, money, onDone }: {
+  lang: "ar" | "en"; total: number; money: (v: number) => string; onDone: () => void;
+}) {
+  const ar = lang === "ar";
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const timer = setTimeout(() => setArmed(false), 5000);
+    return () => clearTimeout(timer);
+  }, [armed]);
+  const zero = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc("reset_all_wallets" as never, {
+        _reason: ar ? "صفّرها السوبر أدمن من صفحة العملاء" : "Zeroed by the Super Admin from the customers page",
+      } as never);
+      if (error) throw error;
+      const v = (data ?? {}) as { customers?: number; total?: number };
+      return { customers: Number(v.customers ?? 0), total: Number(v.total ?? 0) };
+    },
+    onSuccess: (r) => {
+      setArmed(false);
+      toast.success(ar ? `اتصفّرت ${r.customers} محفظة (${money(r.total)})` : `${r.customers} wallets zeroed (${money(r.total)})`);
+      onDone();
+    },
+    onError: (e) => toast.error(friendlyError(e, lang)),
+  });
+  return (
+    <Button size="sm" variant={armed ? "destructive" : "outline"} disabled={zero.isPending || total <= 0}
+      onClick={() => (armed ? zero.mutate() : setArmed(true))}>
+      <Wallet className="me-1 size-4" />
+      {armed
+        ? ar ? `متأكد؟ صفّر ${money(total)}` : `Sure? Zero ${money(total)}`
+        : ar ? "صفّر كل المحافظ" : "Zero all wallets"}
+    </Button>
   );
 }
 

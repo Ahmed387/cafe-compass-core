@@ -607,7 +607,25 @@ function OffersPage() {
             currency={currency}
             isSuperAdmin={Boolean(me?.isRoot || me?.roleNames.includes("Super Admin"))}
             canManage={canManage}
+            offers={allOffers}
+            onEditOffer={(id) => {
+              const offer = allOffers.find((o) => o.id === id);
+              if (offer) void openEdit(offer);
+            }}
           />
+          {runningOffers.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{lang === "ar" ? "العروض الشغالة دلوقتي" : "Offers running now"}</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {lang === "ar"
+                    ? "اضغط تعديل عشان تغيّر السعر أو الاسم أو التاريخ، أو اقفل الزرار عشان توقّف العرض من غير ما يتمسح."
+                    : "Press Edit to change the price, name or dates, or switch it off to stop the offer without deleting it."}
+                </p>
+              </CardHeader>
+              <CardContent>{offerTable(runningOffers)}</CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
               <CardTitle>{t("off.pick")}</CardTitle>
@@ -986,6 +1004,17 @@ function OffersPage() {
             </div>
 
             {/* Financial advisor */}
+            {!advisor.data && (
+              <p className={`rounded-md p-2 text-xs ${advisor.isError ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}>
+                {advisor.isError
+                  ? friendlyError(advisor.error, lang)
+                  : advisor.isFetching
+                    ? lang === "ar" ? "بيحسب التكلفة…" : "Working out the cost…"
+                    : lang === "ar"
+                      ? mode === "bundle" ? "اختار صنفين على الأقل عشان يحسبلك الربح." : "اختار المنتج الأول، وبعدها اكتب السعر وهيظهرلك الربح على طول."
+                      : mode === "bundle" ? "Pick at least two items to see the profit." : "Pick the product first, then type a price to see the profit."}
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/30 p-3 text-sm sm:grid-cols-4">
               <div>
                 <p className="text-xs text-muted-foreground">{t("off.grossBase")}</p>

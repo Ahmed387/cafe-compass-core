@@ -46,6 +46,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { CollapsibleSection, KpiCard, KpiGrid } from "@/components/shared/KpiCard";
 import { RefundBearerList, useRefundsToDecide } from "@/components/pos/RefundBearerList";
 import { useFinancialEngine } from "@/core/hooks/useFinancialEngine";
+import { accrueCashback, nextTier, parseCashbackConfig } from "@/lib/cashback-tiers";
 import { useAuth } from "@/lib/auth";
 import { formatMoney, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
@@ -1032,22 +1033,28 @@ function PosPage() {
 
 
 
-  // Target cashback rule set by the owner: every `target_amount` spent → `reward_amount` in the wallet.
+  // Cashback levels set by the owner: each level's spend target pays its reward into the wallet.
   const cashback = useQuery({
     queryKey: ["cashback-settings"],
     enabled: canUse,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("cashback_settings");
       if (error) throw error;
-      const value = (data ?? {}) as Record<string, unknown>;
-      return {
-        enabled: Boolean(value["enabled"]),
-        target: Number(value["target_amount"] ?? 0),
-        reward: Number(value["reward_amount"] ?? 0),
-      };
+      return parseCashbackConfig(data);
     },
   });
-  const cashbackOn = Boolean(cashback.data?.enabled && cashback.data.target > 0);
+  const cashbackOn = Boolean(cashback.data?.enabled && cashback.data.tiers.length > 0);
+  // Which level the linked customer is on (the lookup row only carries the spend).
+  const customerLevel = useQuery({
+    queryKey: ["pos-customer-cashback", customer?.id],
+    enabled: cashbackOn && Boolean(customer?.id),
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("customer_cashback", { _customer_id: customer!.id });
+      if (error) throw error;
+      const v = (data ?? {}) as Record<string, unknown>;
+      return Math.max(Number(v["level"] ?? 1) - 1, 0);
+    },
+  });
 
   // Super-admin editable footer message printed under both receipt copies.
   const receiptSettings = useQuery({
@@ -1089,13 +1096,14 @@ function PosPage() {
   // Cashback the customer will earn with this bill (wallet money doesn't count toward the target).
   const cashbackPreview = (() => {
     if (!cashbackOn || !cashback.data) return { earn: 0, left: 0 };
-    const progress = Math.max(Number(customer?.cashback_progress ?? 0), -Infinity);
-    const after = progress + Math.max(totals.total - cashbackUsed, 0);
-    const times = Math.max(Math.floor(after / cashback.data.target), 0);
-    return {
-      earn: times * cashback.data.reward,
-      left: Math.max(cashback.data.target - (after - times * cashback.data.target), 0),
-    };
+    const tiers = cashback.data.tiers;
+    const after = accrueCashback(
+      tiers,
+      Number(customer?.cashback_progress ?? 0),
+      customerLevel.data ?? 0,
+      Math.max(totals.total - cashbackUsed, 0),
+    );
+    return { earn: after.earned, left: nextTier(tiers, after.progress, after.level)?.left ?? 0 };
   })();
 
   // One tap: pay as much of the bill as the wallet covers; the other lines absorb the rest.
