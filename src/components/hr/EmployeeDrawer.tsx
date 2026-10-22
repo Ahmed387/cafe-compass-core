@@ -114,10 +114,9 @@ export function EmployeeDrawer({
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 rounded-lg border border-border p-3 text-center text-sm">
+            <div className="grid grid-cols-2 gap-2 rounded-lg border border-border p-3 text-center text-sm">
               <div><p className="text-xs text-muted-foreground">{ar ? "ورديات" : "Shifts"}</p><p className="font-bold">{row.shifts_count}</p></div>
               <div><p className="text-xs text-muted-foreground">{ar ? "أيام" : "Days"}</p><p className="font-bold">{row.worked_days}</p></div>
-              <div><p className="text-xs text-muted-foreground">{ar ? "ساعات" : "Hours"}</p><p className="font-bold">{Number(row.worked_hours).toFixed(1)}</p></div>
             </div>
 
             <StaffAdjustmentsPanel
