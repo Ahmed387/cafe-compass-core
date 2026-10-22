@@ -3,10 +3,17 @@ import { formatDate } from "@/lib/format";
 /** The café's business timezone. Every money date (P&L ranges, payroll months) uses it. */
 export const BUSINESS_TZ = "Africa/Cairo";
 
-/** YYYY-MM-DD for an instant, as seen on the café's wall clock. */
+/**
+ * The business day starts at 06:00 café time: a bill at 01:30 belongs to the
+ * day before. Must match public.business_day_start_hour() in the database.
+ */
+export const BUSINESS_DAY_START_HOUR = 6;
+
+/** YYYY-MM-DD business day of an instant (café wall clock, day starting at 06:00). */
 export function businessDay(at: Date = new Date(), tz = BUSINESS_TZ): string {
+  const shifted = new Date(at.getTime() - BUSINESS_DAY_START_HOUR * 3_600_000);
   // en-CA formats as YYYY-MM-DD.
-  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(shifted);
 }
 
 export function businessToday(tz = BUSINESS_TZ): string {
@@ -49,13 +56,13 @@ export function previousMonth(tz = BUSINESS_TZ): { start: string; end: string } 
   return monthBounds(addDays(firstOfThis, -1).slice(0, 7));
 }
 
-/** UTC instant where a business day starts (for filtering timestamptz columns). */
+/** UTC instant where a business day starts, 06:00 café time (for filtering timestamptz columns). */
 export function businessDayStartIso(day: string, tz = BUSINESS_TZ): string {
   // Find the offset of `tz` at noon that day (DST-safe for whole-hour zones like Cairo).
   const noonUtc = new Date(`${day}T12:00:00.000Z`);
   const local = new Date(noonUtc.toLocaleString("en-US", { timeZone: tz }));
   const offsetMs = local.getTime() - new Date(noonUtc.toLocaleString("en-US", { timeZone: "UTC" })).getTime();
-  return new Date(Date.parse(`${day}T00:00:00.000Z`) - offsetMs).toISOString();
+  return new Date(Date.parse(`${day}T00:00:00.000Z`) + BUSINESS_DAY_START_HOUR * 3_600_000 - offsetMs).toISOString();
 }
 
 export function rangeLabel(from: string, to: string, lang: "en" | "ar" = "en"): string {

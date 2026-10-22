@@ -39,10 +39,19 @@ test("money sums round to piasters and ignore junk", () => {
   assert.equal(sum([10, Number.NaN, 5]), 15);
 });
 
-test("business day follows Cairo time, not UTC", () => {
-  // 23:30 UTC on Oct 21 is already Oct 22 in Cairo (UTC+3 in summer time).
-  assert.equal(businessDay(new Date("2026-10-21T23:30:00Z")), "2026-10-22");
+test("business day follows Cairo time and starts at 6 AM", () => {
+  // 03:30 UTC on Oct 22 is 06:30 in Cairo (UTC+3 in summer time): a new day.
+  assert.equal(businessDay(new Date("2026-10-22T03:30:00Z")), "2026-10-22");
+  // 23:30 UTC on Oct 21 is 02:30 on Oct 22 in Cairo: still the night of Oct 21.
+  assert.equal(businessDay(new Date("2026-10-21T23:30:00Z")), "2026-10-21");
+  // 05:59 Cairo still belongs to the day before.
+  assert.equal(businessDay(new Date("2026-10-22T02:59:00Z")), "2026-10-21");
   assert.equal(businessDay(new Date("2026-10-21T20:00:00Z")), "2026-10-21");
+});
+
+test("business day starts at 06:00 Cairo (03:00 UTC in summer time, 04:00 in winter)", () => {
+  assert.equal(businessDayStartIso("2026-10-22"), "2026-10-22T03:00:00.000Z");
+  assert.equal(businessDayStartIso("2026-12-01"), "2026-12-01T04:00:00.000Z");
 });
 
 test("date helpers", () => {
@@ -50,5 +59,12 @@ test("date helpers", () => {
   assert.equal(addDays("2026-10-31", 1), "2026-11-01");
   // Both ends count: Oct 1 → Oct 21 is 21 days.
   assert.equal(daysBetween("2026-10-01", "2026-10-21"), 21);
-  assert.match(businessDayStartIso("2026-10-22"), /^2026-10-2[12]T/);
+});
+
+test("a refund given back to the cashback wallet still lowers the invoice", () => {
+  // 100 bill: 25 from the wallet + 75 cash, refunded in full.
+  assert.equal(saleRefundTotal([{ amount: 75, wallet_amount: 25 }]), 100);
+  assert.equal(netInvoiceTotal({ total: 100, status: "refunded" }, [{ amount: 75, wallet_amount: 25 }]), 0);
+  // 600 bill whose 25 reward was already spent: 575 back, the café keeps 25.
+  assert.equal(netInvoiceTotal({ total: 600, status: "refunded" }, [{ amount: 575, wallet_amount: 0 }]), 25);
 });

@@ -60,6 +60,7 @@ import { formatDate, formatMoney } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { ExportCsvButton } from "@/components/ui/export-button";
 import type { CsvColumn } from "@/lib/csv";
+import { addDays, businessDayStartIso, businessToday } from "@/core/finance/business-dates";
 
 type OrderExportRow = {
   order_number: string;
@@ -139,9 +140,7 @@ const STOCK_COLUMNS: Array<CsvColumn<StockExportRow>> = [
 ];
 
 function isoDay(offsetDays: number) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().slice(0, 10);
+  return addDays(businessToday(), offsetDays);
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -166,8 +165,8 @@ export function ReportsPage() {
   // Consumption & valuation is an owner/manager screen; the RPC enforces it too.
   const canCogs = (me?.roleNames ?? []).some((role) => role === "Super Admin" || role === "Manager");
 
-  const fromIso = `${from}T00:00:00.000Z`;
-  const toIso = `${to}T23:59:59.999Z`;
+  const fromIso = businessDayStartIso(from);
+  const toIso = businessDayStartIso(addDays(to, 1));
 
   // All sales figures are aggregated on the server over the full range,
   // so no row cap can silently truncate revenue, COGS or the breakdowns.
@@ -279,11 +278,11 @@ export function ReportsPage() {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "order_number, status, total, subtotal, discount_amount, created_at, order_items(product_name, size_name, quantity, line_total, unit_cost, status), order_payments(method_key, amount), order_refunds(amount, status, origin), user_profiles!orders_created_by_fkey(display_name, first_name)",
+          "order_number, status, total, subtotal, discount_amount, created_at, order_items(product_name, size_name, quantity, line_total, unit_cost, status), order_payments(method_key, amount), order_refunds(amount, wallet_amount, status, origin), user_profiles!orders_created_by_fkey(display_name, first_name)",
         )
         .eq("branch_id", currentBranchId!)
         .gte("created_at", fromIso)
-        .lte("created_at", toIso)
+        .lt("created_at", toIso)
         .order("created_at", { ascending: false })
         .range(offset, offset + chunk - 1);
       if (error) throw error;

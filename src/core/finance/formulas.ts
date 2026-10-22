@@ -34,7 +34,13 @@ export function sum(values: number[]) {
   return round2(values.reduce((acc, value) => acc + n(value), 0));
 }
 
-type RefundLike = { amount: number | string; status?: string | null; origin?: string | null };
+type RefundLike = {
+  amount: number | string;
+  /** Part given back to the customer's cashback wallet (bill was partly paid from it). */
+  wallet_amount?: number | string | null;
+  status?: string | null;
+  origin?: string | null;
+};
 
 /**
  * Refunds that lower an invoice's sale value. A removed line already left
@@ -45,7 +51,7 @@ export function saleRefundTotal(refunds: RefundLike[] | null | undefined) {
   return sum(
     (refunds ?? [])
       .filter((r) => (r.status ?? "active") === "active" && (r.origin ?? "manual") !== "void")
-      .map((r) => n(r.amount)),
+      .map((r) => n(r.amount) + n(r.wallet_amount ?? 0)),
   );
 }
 

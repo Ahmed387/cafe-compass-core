@@ -54,6 +54,8 @@ test("cashier reaches the till and own shifts, never money pages", () => {
 test("manager reaches the add-ons page but not the treasury", () => {
   const manager = routeAccessFor(["Manager"]);
   assert.ok(canAccessRoute(manager, "/addons"));
+  assert.ok(canAccessRoute(manager, "/dashboard"));
+  assert.ok(canAccessRoute(manager, "/settings"));
   assert.equal(canAccessRoute(manager, "/treasury"), false);
 });
 

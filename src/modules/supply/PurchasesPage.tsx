@@ -1,3 +1,4 @@
+import { addDays, businessToday } from "@/core/finance/business-dates";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -80,9 +81,7 @@ const EMPTY_LINE: Line = { item_id: "", quantity: "", unit: "", line_total: "" }
 const PAGE_SIZE = 25;
 
 function dayOffset(days: number) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return addDays(businessToday(), days);
 }
 
 type PurchaseRow = {
@@ -126,7 +125,7 @@ export function PurchasesPage() {
   const [purchaseDialog, setPurchaseDialog] = useState(false);
   const [supplierId, setSupplierId] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
-  const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [purchaseDate, setPurchaseDate] = useState(() => businessToday());
   const [discountAmount, setDiscountAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [paidNow, setPaidNow] = useState("");
@@ -141,7 +140,7 @@ export function PurchasesPage() {
   const [terms, setTerms] = useState<PaymentTerms>("cash");
   const [cashSource, setCashSource] = useState<PaySource>("treasury");
   const [attachFile, setAttachFile] = useState<File | null>(null);
-  const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [payDate, setPayDate] = useState(() => businessToday());
   const [payNotes, setPayNotes] = useState("");
   const [pFrom, setPFrom] = useState(dayOffset(-89));
   const [pTo, setPTo] = useState(dayOffset(0));

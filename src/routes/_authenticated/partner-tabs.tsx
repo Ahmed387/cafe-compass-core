@@ -28,6 +28,7 @@ import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { invoiceSequence } from "@/lib/receipt";
+import { businessToday } from "@/core/finance/business-dates";
 
 export const Route = createFileRoute("/_authenticated/partner-tabs")({
   head: () => ({
@@ -156,7 +157,7 @@ function PartnerTabsPage() {
     const blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `partner-invoices-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `partner-invoices-${businessToday()}.csv`;
     a.click();
   };
 

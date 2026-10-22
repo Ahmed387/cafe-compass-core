@@ -19,6 +19,7 @@ import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { invoiceSequence } from "@/lib/receipt";
+import { addDays, businessDayStartIso, businessToday } from "@/core/finance/business-dates";
 
 export const Route = createFileRoute("/_authenticated/refunds")({
   head: () => ({
@@ -64,15 +65,11 @@ type RefundRow = {
 };
 
 function isoDay(offsetDays: number) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().slice(0, 10);
+  return addDays(businessToday(), offsetDays);
 }
 
 function nextDayIso(day: string) {
-  const d = new Date(`${day}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString();
+  return businessDayStartIso(addDays(day, 1));
 }
 
 function RefundsPage() {
@@ -116,7 +113,7 @@ function RefundsPage() {
           "id, created_at, kind, amount, tax_amount, method_key, reason, status, origin, items_payload, orders!inner(shift_id, order_number, customer_name, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name))",
         )
         .eq("orders.branch_id", currentBranchId!)
-        .gte("created_at", `${from}T00:00:00.000Z`)
+        .gte("created_at", businessDayStartIso(from))
         .lt("created_at", nextDayIso(to))
         .order("created_at", { ascending: false })
         .limit(200);
@@ -126,7 +123,7 @@ function RefundsPage() {
         if (dayMatch && dayMatch[1]) {
           const day = dayMatch[1];
           query = query
-            .gte("created_at", `${day}T00:00:00.000Z`)
+            .gte("created_at", businessDayStartIso(day))
             .lt("created_at", nextDayIso(day));
         } else {
           const safe = s.replace(/[%,()]/g, "").trim();

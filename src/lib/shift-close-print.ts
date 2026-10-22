@@ -13,7 +13,7 @@ export type ShiftClosePrintData = {
   cashierName?: string | null;
   openedAt?: string | null;
   tenders: Array<{ label: string; amount: number; count: number }>;
-  refunds?: { total: number; cash: number; waste: number } | null;
+  refunds?: { total: number; cash: number; waste?: number | undefined } | null;
   cash: {
     opening: number;
     cashIn: number;
@@ -47,7 +47,7 @@ export function printShiftCloseReport(data: ShiftClosePrintData) {
     ? `<section><h2>${L("مرتجعات وهالك الوردية", "Refunds & waste")}</h2>
       ${row(L("إجمالي المرتجعات", "Refunded total"), money(data.refunds.total))}
       ${row(L("مرتجعات نقدية", "Cash refunds"), money(data.refunds.cash))}
-      ${row(L("الهالك", "Waste"), money(data.refunds.waste))}
+      ${data.refunds.waste == null ? "" : row(L("الهالك", "Waste"), money(data.refunds.waste))}
     </section>`
     : "";
 

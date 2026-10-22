@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { formatDate, formatMoney, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { StaffAdvancesTab } from "@/modules/governance/StaffAdvancesTab";
+import { businessToday } from "@/core/finance/business-dates";
 
 type DayStatus = "present" | "absent" | "leave" | "half_day" | "permission";
 type StaffRow = { id: string; display_name: string | null; first_name: string; last_name: string | null; employee_code: string | null };
@@ -54,7 +55,7 @@ export function AttendancePage() {
   const canPayroll = can("payroll.manage");
   const canViewAdvances = can("payroll.view") || canPayroll;
   const [month, setMonth] = useState(() => new Date());
-  const [day, setDay] = useState(() => isoDate(new Date()));
+  const [day, setDay] = useState(() => businessToday());
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [attendanceForm, setAttendanceForm] = useState<{ status: DayStatus; permissionHours: string; notes: string } | null>(null);

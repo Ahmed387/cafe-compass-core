@@ -1,3 +1,5 @@
+import { dbErrorToArabic } from "@/lib/db-errors-ar";
+
 export function formatMoney(
   amount: number | string | null | undefined,
   currency = "EGP",
@@ -112,10 +114,6 @@ export function friendlyError(error: unknown, lang: "en" | "ar" = "en"): string 
       en: "There's no positive profit to distribute in this range.",
       ar: "مفيش ربح موجب يتوزع في الفترة دي.",
     }],
-    [/self-sustainability not reached/i, {
-      en: "Payouts unlock after 3 profitable months in a row.",
-      ar: "التوزيع بيتفتح بعد ٣ شهور رابحة ورا بعض.",
-    }],
     [/development fund (is larger|leaves nothing|cannot exceed)/i, {
       en: "The development fund is too large for this profit.",
       ar: "مبلغ صندوق التطوير أكبر من الربح المتاح.",
@@ -152,11 +150,17 @@ export function friendlyError(error: unknown, lang: "en" | "ar" = "en"): string 
       ? "الكمية المتاحة من أحد المكونات غير كافية."
       : "There is not enough stock of one of the ingredients.";
   }
+  if (lang === "ar") {
+    const translated = dbErrorToArabic(raw);
+    if (translated) return translated;
+  }
   for (const [pattern, message] of map) {
     if (pattern.test(raw)) return message[lang];
   }
   if (typeof console !== "undefined") console.error(error);
   const technical = /relation |column |syntax|function |JWT|fetch|constraint|violates/i.test(raw);
-  if (raw && raw.length <= 140 && !technical) return raw;
+  // In Arabic, an English message we have no wording for is never shown as-is.
+  const readable = lang === "en" || /[\u0600-\u06FF]/.test(raw);
+  if (raw && raw.length <= 140 && !technical && readable) return raw;
   return lang === "ar" ? "حدث خطأ ما. حاول مرة أخرى." : "Something went wrong. Please try again.";
 }

@@ -288,8 +288,8 @@ function SustainabilityCard({
             <SectionTitle icon={CircleGauge}>{ar ? "الاستقلال المالي والمدى" : "Self-sustainability & runway"}</SectionTitle>
             <InfoTip title={ar ? "ليه الحاسبة دي هنا؟" : "Why is this here?"}>
               {ar
-                ? "بتقرا آخر شهور كاملة وتقولك المكان بيصرف على نفسه ولا لأ. التوزيع مقفول لحد ما يبقى فيه ٣ شهور رابحة ورا بعض، عشان مانسحبش فلوس المكان محتاجها."
-                : "Reads the last complete months. Payouts stay locked until 3 profitable months in a row, so we never pull money the café still needs."}
+                ? "بتقرا آخر شهور كاملة وتقولك المكان بيصرف على نفسه ولا لأ. ده للمعلومة بس: توزيع الأرباح مش مستنيه، السوبر أدمن يقدر يوزع أي فترة يختارها."
+                : "Reads the last complete months. For information only: payouts don't wait for it, the super admin can pay out any period."}
             </InfoTip>
           </div>
           <p className="mt-3 text-2xl font-black">{headline}</p>

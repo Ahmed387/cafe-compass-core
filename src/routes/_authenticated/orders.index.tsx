@@ -1,3 +1,4 @@
+import { addDays, businessDayStartIso, businessToday } from "@/core/finance/business-dates";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -80,15 +81,11 @@ export const Route = createFileRoute("/_authenticated/orders/")({
 const PAGE_SIZE = 25;
 
 function isoDay(offsetDays: number) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  return d.toISOString().slice(0, 10);
+  return addDays(businessToday(), offsetDays);
 }
 
 function nextDayIso(day: string) {
-  const d = new Date(`${day}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString();
+  return businessDayStartIso(addDays(day, 1));
 }
 
 function searchDay(value: string) {
@@ -169,7 +166,7 @@ function OrdersPage() {
         { count: "exact" },
       )
       .eq("branch_id", branchId)
-      .gte("created_at", `${from}T00:00:00.000Z`)
+      .gte("created_at", businessDayStartIso(from))
       .lt("created_at", nextDayIso(to))
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
@@ -183,7 +180,7 @@ function OrdersPage() {
         .from("order_payments")
         .select("order_id")
         .eq("method_key", payMethod)
-        .gte("created_at", `${from}T00:00:00.000Z`)
+        .gte("created_at", businessDayStartIso(from))
         .lt("created_at", nextDayIso(to))
         .limit(5000);
       if (payError) throw payError;
@@ -206,7 +203,7 @@ function OrdersPage() {
     if (s) {
       const day = searchDay(s);
       if (day) {
-        query = query.gte("created_at", `${day}T00:00:00.000Z`).lt("created_at", nextDayIso(day));
+        query = query.gte("created_at", businessDayStartIso(day)).lt("created_at", nextDayIso(day));
       } else {
         const safe = s.replace(/[%,()]/g, "").trim();
         if (safe) {

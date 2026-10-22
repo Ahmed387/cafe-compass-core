@@ -40,6 +40,7 @@ import { formatDate, formatMoney, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { ExportCsvButton } from "@/components/ui/export-button";
 import type { CsvColumn } from "@/lib/csv";
+import { businessMonth, businessToday, monthBounds } from "@/core/finance/business-dates";
 
 type MovementExportRow = {
   txn_date: string;
@@ -118,10 +119,8 @@ const CATEGORY_LABELS: Record<string, { en: string; ar: string }> = {
 };
 
 function monthRange() {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1);
-  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+  const { start, end } = monthBounds(businessMonth());
+  return { from: start, to: end };
 }
 
 export function TreasuryPage() {
@@ -143,7 +142,7 @@ export function TreasuryPage() {
     direction: "out",
     amount: "",
     method: "cash",
-    date: new Date().toISOString().slice(0, 10),
+    date: businessToday(),
     description: "",
   });
   const [transferOpen, setTransferOpen] = useState(false);
@@ -151,7 +150,7 @@ export function TreasuryPage() {
     from: "",
     to: "",
     amount: "",
-    date: new Date().toISOString().slice(0, 10),
+    date: businessToday(),
   });
 
   const overview = useQuery({

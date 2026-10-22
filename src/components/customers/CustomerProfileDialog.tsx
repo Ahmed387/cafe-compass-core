@@ -63,7 +63,7 @@ export function CustomerProfileDialog({
         supabase
           .from("orders")
           .select(
-            "id, order_number, created_at, order_type, status, total, order_payments(method_key), order_refunds(amount, status, origin)",
+            "id, order_number, created_at, order_type, status, total, order_payments(method_key), order_refunds(amount, wallet_amount, status, origin)",
           )
           .eq("customer_id", id)
           .order("created_at", { ascending: false })

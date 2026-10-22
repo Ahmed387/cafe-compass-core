@@ -15,16 +15,12 @@ import { useI18n } from "@/lib/i18n";
 import { PartnerAccountLink } from "./PartnerAccountLink";
 import { SalaryPayDateInput } from "@/components/finance/SalaryPayDateInput";
 import { cafeToday, paySalaryOn, validPayDate } from "@/components/finance/pay-salary";
+import { businessMonth, monthBounds as businessMonthBounds } from "@/core/finance/business-dates";
 
 type SalaryRow = { user_id: string; base_salary: number; bonuses: number; penalties: number; advances: number; absence_deduction: number; net_pay: number };
 
 function monthBounds() {
-  const now = new Date();
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth() + 1;
-  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const mm = String(m).padStart(2, "0");
-  return { start: `${y}-${mm}-01`, end: `${y}-${mm}-${String(last).padStart(2, "0")}` };
+  return businessMonthBounds(businessMonth());
 }
 
 /** Equity card, managing-partner salary and combined settlement for one partner. */
