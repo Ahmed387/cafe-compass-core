@@ -103,6 +103,8 @@ export function RecipeMatrixPage() {
   const canEdit = can("products.update") || can("inventory.adjust");
 
   const sizes = detail.data?.sizes ?? [];
+  // Ingredient | (size) | qty | unit | waste % | cost | delete
+  const rowColumns = `minmax(12rem,1fr) ${sizes.length > 0 ? "8rem " : ""}5.5rem 6rem 8.5rem 10rem 2.25rem`;
   const lineCost = (l: Line) => {
     const i = invMap.get(l.item_id);
     return i ? toStockUnit(Number(l.qty || 0), l.unit, i.unit) * i.cost : 0;
@@ -162,14 +164,30 @@ export function RecipeMatrixPage() {
               </div>
 
               <div className="space-y-2">
+                {lines.length > 0 && (
+                  // Column titles; every row below uses the same grid so the columns line up.
+                  <div className="hidden items-center gap-2 px-1 text-xs font-medium text-muted-foreground md:grid" style={{ gridTemplateColumns: rowColumns }}>
+                    <span>الخامة</span>
+                    {sizes.length > 0 && <span>الحجم</span>}
+                    <span className="text-center">الكمية</span>
+                    <span className="text-center">الوحدة</span>
+                    <span className="text-center">هالك %</span>
+                    <span>التكلفة</span>
+                    <span />
+                  </div>
+                )}
                 {lines.map((l) => {
                   const inv = invMap.get(l.item_id);
                   const set = (patch: Partial<Line>) =>
                     setLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, ...patch } : x)));
                   return (
-                    <div key={l.key} className="flex flex-wrap items-center gap-2">
+                    <div
+                      key={l.key}
+                      className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 p-2 md:grid md:border-0 md:p-0"
+                      style={{ gridTemplateColumns: rowColumns }}
+                    >
                       <select
-                        className="h-9 min-w-48 flex-1 rounded-md border bg-background px-2 text-sm"
+                        className="h-9 w-full min-w-0 rounded-md border bg-background px-2 text-sm"
                         value={l.item_id}
                         disabled={!canEdit}
                         onChange={(e) => {
@@ -186,7 +204,7 @@ export function RecipeMatrixPage() {
                       </select>
                       {sizes.length > 0 && (
                         <select
-                          className="h-9 rounded-md border bg-background px-2 text-sm"
+                          className="h-9 w-full rounded-md border bg-background px-2 text-sm"
                           value={l.size_id}
                           disabled={!canEdit}
                           onChange={(e) => set({ size_id: e.target.value })}
@@ -202,13 +220,13 @@ export function RecipeMatrixPage() {
                       <Input
                         type="number"
                         min={0}
-                        className="h-9 w-24"
+                        className="h-9 w-24 text-center tabular-nums md:w-full"
                         value={l.qty}
                         disabled={!canEdit}
                         onChange={(e) => set({ qty: e.target.value })}
                       />
                       <select
-                        className="h-9 rounded-md border bg-background px-2 text-sm"
+                        className="h-9 w-24 rounded-md border bg-background px-2 text-sm md:w-full"
                         value={l.unit}
                         disabled={!canEdit || !inv}
                         onChange={(e) => set({ unit: e.target.value })}
@@ -219,15 +237,10 @@ export function RecipeMatrixPage() {
                           </option>
                         ))}
                       </select>
-                      {inv && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground" title="نسبة الهالك للخامة دي (متابعة بس — مش بتزود التكلفة)">
-                          <span>هالك</span>
-                          <div className="w-16">
-                            <WasteCell itemId={inv.id} value={inv.waste} editable={canEdit} lang="ar" />
-                          </div>
-                        </div>
-                      )}
-                      <span className="min-w-28 text-xs text-muted-foreground" dir="rtl">
+                      <div title="نسبة الهالك للخامة دي (متابعة بس — مش بتزود التكلفة)">
+                        {inv && <WasteCell itemId={inv.id} value={inv.waste} editable={canEdit} lang="ar" />}
+                      </div>
+                      <span className="min-w-28 text-xs leading-relaxed text-muted-foreground" dir="rtl">
                         <b className="text-foreground">{formatMoney(lineCost(l))}</b>
                         {inv && Number(l.qty) > 0 && (
                           <span className="block">
