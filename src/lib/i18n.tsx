@@ -1443,6 +1443,7 @@ export const dict: Dict = {
   "cust.refundsTotal": { en: "Total refunds", ar: "إجمالي المرتجعات" },
   "cust.points": { en: "Points balance", ar: "رصيد النقاط" },
   "cust.partnerBadge": { en: "Registered partner", ar: "شريك مسجل" },
+  "cust.partnerWithTab": { en: "Partner with an open tab", ar: "شريك وعليه فاتورة" },
   "cust.pendingTab": { en: "Pending profit deductions", ar: "المسحوبات المعلقة على الأرباح" },
   "cust.invoices": { en: "Invoices", ar: "سجل الفواتير" },
   "cust.refundsLog": { en: "Refunds log", ar: "سجل المرتجعات" },
