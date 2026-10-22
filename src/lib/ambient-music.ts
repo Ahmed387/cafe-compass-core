@@ -1,33 +1,45 @@
 /**
- * An original, slow 1940s "jazz noir" groove generated live with the Web Audio API:
- * a walking upright bass, soft piano chords, brushes on the snare, a lazy muted
- * sax line, a little vinyl crackle and a smoky room reverb. Nothing is downloaded
- * and there is no licensed recording behind it.
+ * An original, sultry Latin lounge (cha-cha) groove generated live with the Web
+ * Audio API: a tumbao bass, a piano montuno, clave, congas, a shaker and the
+ * "cha-cha" güiro, with a muted trumpet singing an original melody. Nothing is
+ * downloaded and no existing song or recording is used.
  */
 
-const BPM = 68;
+const BPM = 112;
 const BEAT = 60 / BPM;
-const SWING = 0.62; // the off-beat eighth lands late, like a lazy swing
 
-// C minor noir changes, one bar each: Cm9 | Fm9 | Dm7b5 | G7b9
-const BARS = [
-  { root: 36, chord: [51, 55, 58, 62], walk: [36, 39, 43, 44] },
-  { root: 41, chord: [51, 56, 60, 63], walk: [41, 44, 48, 49] },
-  { root: 38, chord: [50, 53, 56, 60], walk: [38, 41, 44, 42] },
-  { root: 43, chord: [49, 53, 56, 59], walk: [43, 47, 50, 37] },
+type Bar = { bass: [number, number, number]; chord: number[] };
+// A minor, eight bars: Am7 | Am7 | Dm7 | E7 | Dm7 | E7 | Am7 | Am7
+const AM: Bar = { bass: [45, 52, 45], chord: [60, 64, 67, 69] };
+const DM: Bar = { bass: [38, 45, 38], chord: [60, 62, 65, 69] };
+const E7: Bar = { bass: [40, 47, 40], chord: [59, 62, 64, 68] };
+const FORM: Bar[] = [AM, AM, DM, E7, DM, E7, AM, AM];
+
+// The trumpet's tune, written for this page: [beat in bar, MIDI note, beats long].
+const MELODY: Array<Array<[number, number, number]>> = [
+  [[0.5, 72, 0.5], [1, 71, 0.5], [1.5, 69, 1.5], [3, 76, 1]],
+  [[0, 74, 0.5], [0.5, 72, 0.5], [1, 71, 1], [2.5, 69, 1.5]],
+  [[0.5, 74, 0.5], [1, 72, 0.5], [1.5, 69, 0.5], [2, 77, 1.5], [3.5, 76, 0.5]],
+  [[0, 74, 1], [1, 71, 0.5], [1.5, 68, 1.5], [3, 64, 1]],
+  [[0.5, 77, 0.5], [1, 76, 0.5], [1.5, 74, 1], [2.5, 72, 1], [3.5, 74, 0.5]],
+  [[0, 76, 1.5], [1.5, 74, 0.5], [2, 71, 0.5], [2.5, 68, 1.5]],
+  [[0, 69, 1], [1, 72, 0.5], [1.5, 76, 1], [2.5, 81, 1.5]],
+  [[0, 76, 2.5]],
 ];
-// C minor blues scale for the sax, around the middle of its range.
-const SAX_NOTES = [60, 63, 65, 66, 67, 70, 72, 75];
+// Piano montuno: syncopated eighths, alternating low and high voicing.
+const MONTUNO: Array<[number, boolean]> = [
+  [0, false], [0.5, true], [1.5, false], [2, true], [2.5, false], [3.5, true],
+];
+// 2-3 son clave across two bars.
+const CLAVE: number[][] = [[1, 2], [0, 1.5, 3]];
 
 const hz = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
-const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)]!;
 
 export class AmbientMusic {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private room: ConvolverNode | null = null;
   private noise: AudioBuffer | null = null;
-  private crackle: AudioBufferSourceNode | null = null;
   private timer: number | null = null;
   private suspendTimer: number | null = null;
   private nextBarTime = 0;
@@ -46,7 +58,6 @@ export class AmbientMusic {
     this.suspendTimer = null;
     await ctx.resume();
     this.master!.gain.setTargetAtTime(this.volume, ctx.currentTime, 1.2);
-    this.startCrackle();
     this.nextBarTime = ctx.currentTime + 0.2;
     // Look-ahead scheduler: queue every bar a little before it is due.
     this.timer = window.setInterval(() => this.schedule(), 200);
@@ -56,8 +67,6 @@ export class AmbientMusic {
   stop() {
     if (this.timer !== null) window.clearInterval(this.timer);
     this.timer = null;
-    this.crackle?.stop();
-    this.crackle = null;
     if (this.ctx && this.master) {
       this.master.gain.setTargetAtTime(0, this.ctx.currentTime, 0.4);
       const ctx = this.ctx;
@@ -82,11 +91,11 @@ export class AmbientMusic {
     master.gain.value = 0;
     const warmth = ctx.createBiquadFilter();
     warmth.type = "lowpass";
-    warmth.frequency.value = 5200;
+    warmth.frequency.value = 7000;
     master.connect(warmth).connect(ctx.destination);
 
-    // A dark, smoky room: noise that decays over ~2.6s as the impulse response.
-    const length = Math.floor(ctx.sampleRate * 2.6);
+    // A warm lounge room: noise decaying over ~1.8s as the impulse response.
+    const length = Math.floor(ctx.sampleRate * 1.8);
     const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
     for (let ch = 0; ch < 2; ch += 1) {
       const data = impulse.getChannelData(ch);
@@ -95,7 +104,7 @@ export class AmbientMusic {
     const room = ctx.createConvolver();
     room.buffer = impulse;
     const roomLevel = ctx.createGain();
-    roomLevel.gain.value = 0.35;
+    roomLevel.gain.value = 0.28;
     room.connect(roomLevel).connect(master);
 
     const noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
@@ -111,153 +120,171 @@ export class AmbientMusic {
   private schedule() {
     const ctx = this.ctx!;
     while (this.nextBarTime < ctx.currentTime + 1.5) {
-      this.playBar(this.nextBarTime, BARS[this.bar % BARS.length]!, this.bar);
+      this.playBar(this.nextBarTime, this.bar);
       this.nextBarTime += BEAT * 4;
       this.bar += 1;
     }
   }
 
-  private playBar(t: number, bar: (typeof BARS)[number], index: number) {
-    // Walking bass on every beat.
-    bar.walk.forEach((note, beat) => this.bass(t + beat * BEAT, note));
-    // Piano: a soft chord on beat 1, a lighter stab on the swung "and" of 2.
-    this.piano(t, bar.chord, 0.05, BEAT * 3);
-    if (index % 2 === 1) this.piano(t + BEAT * (1 + SWING), bar.chord, 0.03, BEAT * 1.2);
-    // Brushes: a swish on 2 and 4, a light tap on the swung eighths.
-    for (let beat = 0; beat < 4; beat += 1) {
-      const at = t + beat * BEAT;
-      if (beat % 2 === 1) this.brush(at, 0.09, 0.22);
-      this.brush(at + BEAT * SWING, 0.025, 0.06);
+  private playBar(t: number, index: number) {
+    const slot = index % FORM.length;
+    const bar = FORM[slot]!;
+    const next = FORM[(slot + 1) % FORM.length]!;
+    const at = (beat: number) => t + beat * BEAT;
+
+    // Tumbao bass: the root, the fifth on the "and" of 2, the next root pushed onto 4.
+    this.bass(at(0), bar.bass[0], 1.2);
+    this.bass(at(1.5), bar.bass[1], 1);
+    this.bass(at(3), next.bass[0], 1);
+
+    for (const [beat, high] of MONTUNO) this.piano(at(beat), bar.chord, high);
+
+    // Percussion: clave, shaker eighths, congas on 4-and, güiro on "cha-cha".
+    for (const beat of CLAVE[index % 2]!) this.click(at(beat), 1900, 0.09);
+    for (let e = 0; e < 8; e += 1) this.shaker(at(e / 2), e % 2 === 0 ? 0.035 : 0.02);
+    this.conga(at(3), 220, 0.18);
+    this.conga(at(3.5), 220, 0.15);
+    this.conga(at(1), 330, 0.07);
+    this.guiro(at(3), BEAT * 0.4);
+    this.guiro(at(3.5), BEAT * 0.4);
+
+    // The trumpet sings the tune every other time round the form, then rests.
+    if (Math.floor(index / FORM.length) % 2 === 0) {
+      for (const [beat, note, len] of MELODY[slot]!) this.trumpet(at(beat), note, len * BEAT);
     }
-    // The sax answers every other bar, so there is room to breathe.
-    if (index % 2 === 0) this.saxPhrase(t + BEAT * 0.5);
   }
 
-  private bass(t: number, note: number) {
+  private bass(t: number, note: number, beats: number) {
     const ctx = this.ctx!;
     const osc = ctx.createOscillator();
     osc.type = "triangle";
     osc.frequency.value = hz(note);
     const tone = ctx.createBiquadFilter();
     tone.type = "lowpass";
-    tone.frequency.value = 420;
+    tone.frequency.value = 500;
     const amp = ctx.createGain();
     amp.gain.setValueAtTime(0, t);
-    amp.gain.linearRampToValueAtTime(0.32, t + 0.015);
-    amp.gain.exponentialRampToValueAtTime(0.0001, t + BEAT * 0.95);
+    amp.gain.linearRampToValueAtTime(0.34, t + 0.01);
+    amp.gain.exponentialRampToValueAtTime(0.0001, t + BEAT * beats);
     osc.connect(tone).connect(amp).connect(this.master!);
     osc.start(t);
-    osc.stop(t + BEAT);
+    osc.stop(t + BEAT * beats + 0.02);
   }
 
-  private piano(t: number, notes: number[], level: number, length: number) {
+  private piano(t: number, chord: number[], high: boolean) {
     const ctx = this.ctx!;
-    notes.forEach((note, i) => {
-      const at = t + i * 0.012; // a tiny roll, like fingers landing
+    const notes = high ? chord.map((n) => n + 12) : chord;
+    notes.forEach((note) => {
       const osc = ctx.createOscillator();
-      osc.type = "sine";
+      osc.type = "triangle";
       osc.frequency.value = hz(note);
-      const overtone = ctx.createOscillator();
-      overtone.type = "sine";
-      overtone.frequency.value = hz(note) * 2;
-      const otLevel = ctx.createGain();
-      otLevel.gain.value = 0.25;
       const amp = ctx.createGain();
-      amp.gain.setValueAtTime(0, at);
-      amp.gain.linearRampToValueAtTime(level, at + 0.01);
-      amp.gain.exponentialRampToValueAtTime(0.0001, at + length);
+      amp.gain.setValueAtTime(0, t);
+      amp.gain.linearRampToValueAtTime(high ? 0.022 : 0.03, t + 0.005);
+      amp.gain.exponentialRampToValueAtTime(0.0001, t + BEAT * 0.45);
       osc.connect(amp);
-      overtone.connect(otLevel).connect(amp);
       amp.connect(this.master!);
       amp.connect(this.room!);
-      osc.start(at);
-      overtone.start(at);
-      osc.stop(at + length + 0.05);
-      overtone.stop(at + length + 0.05);
+      osc.start(t);
+      osc.stop(t + BEAT * 0.5);
     });
   }
 
-  private brush(t: number, level: number, length: number) {
+  private click(t: number, freq: number, level: number) {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    const amp = ctx.createGain();
+    amp.gain.setValueAtTime(level, t);
+    amp.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    osc.connect(amp);
+    amp.connect(this.master!);
+    amp.connect(this.room!);
+    osc.start(t);
+    osc.stop(t + 0.07);
+  }
+
+  private conga(t: number, freq: number, level: number) {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq * 1.5, t);
+    osc.frequency.exponentialRampToValueAtTime(freq, t + 0.04);
+    const amp = ctx.createGain();
+    amp.gain.setValueAtTime(level, t);
+    amp.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    osc.connect(amp);
+    amp.connect(this.master!);
+    amp.connect(this.room!);
+    osc.start(t);
+    osc.stop(t + 0.32);
+  }
+
+  private noiseHit(t: number, filter: BiquadFilterType, freq: number, level: number, length: number, swell: boolean) {
     const ctx = this.ctx!;
     const src = ctx.createBufferSource();
     src.buffer = this.noise;
     const band = ctx.createBiquadFilter();
-    band.type = "bandpass";
-    band.frequency.value = 3200;
-    band.Q.value = 0.6;
+    band.type = filter;
+    band.frequency.value = freq;
     const amp = ctx.createGain();
-    amp.gain.setValueAtTime(0, t);
-    amp.gain.linearRampToValueAtTime(level, t + length * 0.3);
+    amp.gain.setValueAtTime(swell ? 0 : level, t);
+    if (swell) amp.gain.linearRampToValueAtTime(level, t + length * 0.8);
     amp.gain.exponentialRampToValueAtTime(0.0001, t + length);
     src.connect(band).connect(amp).connect(this.master!);
     src.start(t, Math.random());
     src.stop(t + length + 0.02);
+    return amp;
   }
 
-  private saxPhrase(t: number) {
-    // Two to four long, bluesy notes that drift down and land on a chord tone.
-    let at = t;
-    let note = pick(SAX_NOTES.slice(3));
-    const count = 2 + Math.floor(Math.random() * 3);
-    for (let i = 0; i < count; i += 1) {
-      const length = BEAT * pick([0.75, 1, 1.5, 2]);
-      this.sax(at, note, length);
-      at += length + BEAT * pick([0, 0.25, 0.5]);
-      const lower = SAX_NOTES.filter((n) => n < note);
-      note = lower.length > 0 && Math.random() < 0.7 ? pick(lower.slice(-3)) : pick(SAX_NOTES);
-    }
+  private shaker(t: number, level: number) {
+    this.noiseHit(t, "highpass", 6000, level, 0.07, false);
   }
 
-  private sax(t: number, note: number, length: number) {
+  private guiro(t: number, length: number) {
+    // A scrape: noise gated by a fast ratchet, swelling into the next beat.
+    const amp = this.noiseHit(t, "bandpass", 2600, 0.05, length, true);
+    const ctx = this.ctx!;
+    const ratchet = ctx.createOscillator();
+    ratchet.type = "square";
+    ratchet.frequency.value = 38;
+    const depth = ctx.createGain();
+    depth.gain.value = 0.025;
+    ratchet.connect(depth).connect(amp.gain);
+    ratchet.start(t);
+    ratchet.stop(t + length);
+  }
+
+  private trumpet(t: number, note: number, length: number) {
     const ctx = this.ctx!;
     const osc = ctx.createOscillator();
     osc.type = "sawtooth";
     osc.frequency.value = hz(note);
-    // Slow, late vibrato, the way a tenor leans into a long note.
+    // A little scoop into the note and a late vibrato, like a muted trumpet.
+    osc.detune.setValueAtTime(-40, t);
+    osc.detune.linearRampToValueAtTime(0, t + 0.06);
     const vibrato = ctx.createOscillator();
-    vibrato.frequency.value = 4.8;
+    vibrato.frequency.value = 5.5;
     const depth = ctx.createGain();
     depth.gain.setValueAtTime(0, t);
-    depth.gain.linearRampToValueAtTime(hz(note) * 0.008, t + length * 0.6);
+    depth.gain.linearRampToValueAtTime(hz(note) * 0.006, t + Math.max(length * 0.7, 0.05));
     vibrato.connect(depth).connect(osc.frequency);
-    const tone = ctx.createBiquadFilter();
-    tone.type = "lowpass";
-    tone.Q.value = 2;
-    tone.frequency.setValueAtTime(700, t);
-    tone.frequency.linearRampToValueAtTime(1500, t + 0.12);
-    tone.frequency.linearRampToValueAtTime(950, t + length);
+    const mute = ctx.createBiquadFilter();
+    mute.type = "bandpass";
+    mute.frequency.value = 1400;
+    mute.Q.value = 1.4;
     const amp = ctx.createGain();
     amp.gain.setValueAtTime(0, t);
-    amp.gain.linearRampToValueAtTime(0.06, t + 0.08);
-    amp.gain.setValueAtTime(0.06, t + length * 0.7);
+    amp.gain.linearRampToValueAtTime(0.11, t + 0.03);
+    amp.gain.setValueAtTime(0.1, t + length * 0.75);
     amp.gain.linearRampToValueAtTime(0, t + length);
-    osc.connect(tone).connect(amp);
+    osc.connect(mute).connect(amp);
     amp.connect(this.master!);
     amp.connect(this.room!);
     osc.start(t);
     vibrato.start(t);
     osc.stop(t + length + 0.05);
     vibrato.stop(t + length + 0.05);
-  }
-
-  private startCrackle() {
-    const ctx = this.ctx!;
-    // Sparse random clicks over a faint hiss, like an old record.
-    const buffer = ctx.createBuffer(1, ctx.sampleRate * 4, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i += 1) {
-      data[i] = (Math.random() * 2 - 1) * 0.012 + (Math.random() < 0.0004 ? (Math.random() * 2 - 1) * 0.5 : 0);
-    }
-    const src = ctx.createBufferSource();
-    src.buffer = buffer;
-    src.loop = true;
-    const tone = ctx.createBiquadFilter();
-    tone.type = "highpass";
-    tone.frequency.value = 1500;
-    const amp = ctx.createGain();
-    amp.gain.value = 0.35;
-    src.connect(tone).connect(amp).connect(this.master!);
-    src.start();
-    this.crackle = src;
   }
 }
