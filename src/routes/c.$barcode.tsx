@@ -77,7 +77,7 @@ function CustomerCardPage() {
             {d.cashback_enabled && target > 0 && (
               <div className="space-y-2 rounded-lg bg-muted/60 p-3 text-sm">
                 <p>
-                  كل ما تصرف {formatMoney(target, "EGP", "ar")} بتاخد {formatMoney(d.reward_amount, "EGP", "ar")} في محفظتك.
+                  لما مشترياتك توصل {formatMoney(target, "EGP", "ar")} هتاخد {formatMoney(d.reward_amount, "EGP", "ar")} في محفظتك.
                 </p>
                 <Progress value={done * 100} />
                 <p className="text-muted-foreground">فاضل {formatMoney(d.to_next_reward, "EGP", "ar")} للمكافأة الجاية</p>

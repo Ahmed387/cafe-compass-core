@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Lightbulb, Sparkles } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Lightbulb, Pencil, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -38,13 +38,18 @@ const num = (v: unknown) => {
  * "Suggest offers": reads the last 30 days of invoices and the stock, lists
  * offers worth running with the reason, the cost and the profit. The price is
  * editable and the profit updates as you type; approving publishes the offer
- * to the till and the public menu.
+ * to the till and the public menu. A suggestion that already has a running
+ * offer opens that offer for editing instead; any suggestion can be hidden.
  */
-export function OfferAdvisorPanel({ lang, currency, isSuperAdmin, canManage }: {
+export type AdvisorOffer = { id: string; product_id: string | null; is_active: boolean; ends_at: string | null };
+
+export function OfferAdvisorPanel({ lang, currency, isSuperAdmin, canManage, offers, onEditOffer }: {
   lang: "ar" | "en";
   currency: string;
   isSuperAdmin: boolean;
   canManage: boolean;
+  offers: AdvisorOffer[];
+  onEditOffer: (offerId: string) => void;
 }) {
   const ar = lang === "ar";
   const money = (v: number) => formatMoney(v, currency, lang);
@@ -66,7 +71,40 @@ export function OfferAdvisorPanel({ lang, currency, isSuperAdmin, canManage }: {
     },
   });
 
-  const suggestions = data.data ? buildSuggestions(data.data, PERIOD_DAYS, lang).slice(0, 12) : [];
+  const qc = useQueryClient();
+  const [showHidden, setShowHidden] = useState(false);
+  const hidden = useQuery({
+    queryKey: ["offer-hidden-suggestions"],
+    enabled: asked,
+    queryFn: async () => {
+      const { data: list, error } = await supabase.rpc("offer_hidden_suggestions" as never);
+      if (error) {
+        if (isMissingFunction(error)) return new Set<string>();
+        throw error;
+      }
+      return new Set(((list ?? []) as unknown as string[]).map(String));
+    },
+  });
+  const setHidden = useMutation({
+    mutationFn: async ({ productId, hide }: { productId: string; hide: boolean }) => {
+      const { error } = await supabase.rpc("set_offer_suggestion_hidden" as never, { _product_id: productId, _hidden: hide } as never);
+      if (error) throw error;
+      return hide;
+    },
+    onSuccess: async (hide) => {
+      await qc.invalidateQueries({ queryKey: ["offer-hidden-suggestions"] });
+      toast.success(hide ? (ar ? "الاقتراح اتخفى" : "Suggestion hidden") : (ar ? "الاقتراح رجع" : "Suggestion shown"));
+    },
+    onError: (e) => toast.error(friendlyError(e, lang)),
+  });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const runningOffer = (productId: string) =>
+    offers.find((o) => o.product_id === productId && o.is_active && (!o.ends_at || o.ends_at >= today)) ?? null;
+  const all = data.data ? buildSuggestions(data.data, PERIOD_DAYS, lang).slice(0, 12) : [];
+  const hiddenSet = hidden.data ?? new Set<string>();
+  const hiddenCount = all.filter((s) => hiddenSet.has(s.product_id)).length;
+  const suggestions = all.filter((s) => showHidden === hiddenSet.has(s.product_id));
 
   return (
     <Card>
@@ -91,14 +129,46 @@ export function OfferAdvisorPanel({ lang, currency, isSuperAdmin, canManage }: {
         <CardContent className="space-y-3">
           {data.isError ? (
             <p className="text-sm text-destructive">{friendlyError(data.error, lang)}</p>
-          ) : !data.isFetching && suggestions.length === 0 ? (
-            <EmptyState message={ar ? "مفيش اقتراحات دلوقتي: محتاج أصناف ليها سعر وتكلفة ومبيعات." : "No suggestions yet: products need a price, a cost and sales."} />
           ) : (
-            <div className="grid gap-3 lg:grid-cols-2">
-              {suggestions.map((s) => (
-                <SuggestionCard key={s.product_id} s={s} lang={lang} money={money} isSuperAdmin={isSuperAdmin} canManage={canManage} />
-              ))}
-            </div>
+            <>
+              {(hiddenCount > 0 || showHidden) && (
+                <div className="flex justify-end">
+                  <Button size="sm" variant="ghost" onClick={() => setShowHidden((v) => !v)}>
+                    {showHidden ? <Eye className="me-1 size-4" /> : <EyeOff className="me-1 size-4" />}
+                    {showHidden
+                      ? ar ? "ارجع للاقتراحات" : "Back to suggestions"
+                      : ar ? `الاقتراحات المخفية (${hiddenCount})` : `Hidden suggestions (${hiddenCount})`}
+                  </Button>
+                </div>
+              )}
+              {!data.isFetching && suggestions.length === 0 ? (
+                <EmptyState
+                  message={
+                    showHidden
+                      ? ar ? "مفيش اقتراحات مخفية." : "No hidden suggestions."
+                      : ar ? "مفيش اقتراحات دلوقتي: محتاج أصناف ليها سعر وتكلفة ومبيعات." : "No suggestions yet: products need a price, a cost and sales."
+                  }
+                />
+              ) : (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {suggestions.map((s) => (
+                    <SuggestionCard
+                      key={s.product_id}
+                      s={s}
+                      lang={lang}
+                      money={money}
+                      isSuperAdmin={isSuperAdmin}
+                      canManage={canManage}
+                      running={runningOffer(s.product_id)}
+                      onEditOffer={onEditOffer}
+                      isHidden={hiddenSet.has(s.product_id)}
+                      onHide={(hide) => setHidden.mutate({ productId: s.product_id, hide })}
+                      hiding={setHidden.isPending}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       )}
@@ -129,18 +199,22 @@ const KIND_LABEL = {
   best_seller: { ar: "الأكتر مبيعاً", en: "Best seller" },
 } as const;
 
-function SuggestionCard({ s, lang, money, isSuperAdmin, canManage }: {
+function SuggestionCard({ s, lang, money, isSuperAdmin, canManage, running, onEditOffer, isHidden, onHide, hiding }: {
   s: Suggestion;
   lang: "ar" | "en";
   money: (v: number) => string;
   isSuperAdmin: boolean;
   canManage: boolean;
+  running: AdvisorOffer | null;
+  onEditOffer: (offerId: string) => void;
+  isHidden: boolean;
+  onHide: (hide: boolean) => void;
+  hiding: boolean;
 }) {
   const ar = lang === "ar";
   const qc = useQueryClient();
   const [price, setPrice] = useState(s.suggested_price.toFixed(2));
   const [target, setTarget] = useState(String(s.suggested_margin));
-  const [done, setDone] = useState(false);
 
   const p = Number(price) || 0;
   const t = Number(target) || 0;
@@ -171,7 +245,6 @@ function SuggestionCard({ s, lang, money, isSuperAdmin, canManage }: {
       if (error) throw error;
     },
     onSuccess: async () => {
-      setDone(true);
       await qc.invalidateQueries({ queryKey: ["product-offers"] });
       await qc.invalidateQueries({ queryKey: ["pos-active-offers"] });
       toast.success(ar ? "العرض اتنشر للكاشير وفي المنيو" : "Offer is live at the till and on the menu");
@@ -189,7 +262,10 @@ function SuggestionCard({ s, lang, money, isSuperAdmin, canManage }: {
             {ar ? "ربحه العادي" : "Normal margin"} {s.normal_margin.toFixed(0)}%
           </p>
         </div>
-        <Badge variant="secondary">{KIND_LABEL[s.kind][lang]}</Badge>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Badge variant="secondary">{KIND_LABEL[s.kind][lang]}</Badge>
+          {running && <Badge>{ar ? "عليه عرض شغال" : "Offer running"}</Badge>}
+        </div>
       </div>
       <p className="rounded-md bg-muted p-2 text-sm">
         <span className="font-medium">{ar ? "ليه؟ " : "Why? "}</span>
@@ -237,14 +313,29 @@ function SuggestionCard({ s, lang, money, isSuperAdmin, canManage }: {
           {ar ? "سعر العرض أعلى من السعر العادي." : "The offer price is above the normal price."}
         </p>
       )}
-      <Button
-        className="w-full"
-        disabled={!canManage || done || approve.isPending || p <= 0 || underTarget || aboveNormal}
-        onClick={() => approve.mutate()}
-      >
-        <CheckCircle2 className="me-1 size-4" />
-        {done ? (ar ? "اتنشر" : "Published") : ar ? "اعتمد العرض" : "Approve offer"}
-      </Button>
+      <div className="flex gap-2">
+        {running ? (
+          <Button className="flex-1" variant="secondary" disabled={!canManage} onClick={() => onEditOffer(running.id)}>
+            <Pencil className="me-1 size-4" />
+            {ar ? "عدّل العرض أو وقّفه" : "Edit or stop the offer"}
+          </Button>
+        ) : (
+          <Button
+            className="flex-1"
+            disabled={!canManage || approve.isPending || p <= 0 || underTarget || aboveNormal}
+            onClick={() => approve.mutate()}
+          >
+            <CheckCircle2 className="me-1 size-4" />
+            {ar ? "اعتمد العرض" : "Approve offer"}
+          </Button>
+        )}
+        {canManage && (
+          <Button variant="outline" disabled={hiding} onClick={() => onHide(!isHidden)}>
+            {isHidden ? <Eye className="me-1 size-4" /> : <EyeOff className="me-1 size-4" />}
+            {isHidden ? (ar ? "إظهار" : "Show") : ar ? "إخفاء" : "Hide"}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
