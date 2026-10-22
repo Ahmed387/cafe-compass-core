@@ -1,6 +1,8 @@
-/** Today in the cafe's day (Africa/Cairo), as YYYY-MM-DD. */
+import { businessDay } from "@/core/finance/business-dates";
+
+/** Today in the cafe's business day (Africa/Cairo, starting 06:00), as YYYY-MM-DD. */
 export function cafeToday(now = new Date(), timeZone = "Africa/Cairo"): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  return businessDay(now, timeZone);
 }
 
 /** A pay date must be a real day and not in the future. */

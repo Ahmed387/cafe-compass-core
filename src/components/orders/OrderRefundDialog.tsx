@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { normalizeTender } from "@/core/finance/formulas";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { formatMoney, friendlyError } from "@/lib/format";
@@ -40,6 +41,26 @@ type PayloadEntry = { order_item_id?: string; quantity?: number };
 type Disposition = "restock" | "waste";
 type LineState = { qty: number; disposition: Disposition };
 type Mode = "full" | "partial";
+type RefundResult = { amount?: number; wallet_amount?: number; reward_clawback?: number; cash_withheld?: number };
+
+/** One line after a refund: what went back as money, to the wallet, and any reward taken back. */
+function refundSummary(result: RefundResult | null, currency: string, lang: "en" | "ar") {
+  if (!result) return undefined;
+  const ar = lang === "ar";
+  const money = (v: number | undefined) => formatMoney(Number(v ?? 0), currency, lang);
+  const parts = [`${ar ? "رجع للعميل" : "Refunded"} ${money(result.amount)}`];
+  if (Number(result.wallet_amount ?? 0) > 0) parts.push(`${ar ? "ورجع لمحفظته" : "back to wallet"} ${money(result.wallet_amount)}`);
+  if (Number(result.cash_withheld ?? 0) > 0) {
+    parts.push(ar
+      ? `واتخصم ${money(result.cash_withheld)} مكافأة كاش باك كان صرفها`
+      : `${money(result.cash_withheld)} cashback reward already spent was kept`);
+  } else if (Number(result.reward_clawback ?? 0) > 0) {
+    parts.push(ar
+      ? `واتسحب ${money(result.reward_clawback)} مكافأة كاش باك من محفظته`
+      : `${money(result.reward_clawback)} cashback reward taken back from the wallet`);
+  }
+  return parts.join(ar ? "، " : ", ");
+}
 
 function ModeCard({
   active,
@@ -121,17 +142,20 @@ export function OrderRefundDialog({
     queryKey: ["refund-prior", order?.id],
     enabled: Boolean(order) && open,
     queryFn: async () => {
-      if (!order) return { refundedAmount: 0, refundedQty: {} as Record<string, number> };
+      if (!order) return { refundedCash: 0, refundedWallet: 0, refundedQty: {} as Record<string, number> };
       const { data, error } = await supabase
         .from("order_refunds")
-        .select("amount, items_payload")
+        .select("amount, wallet_amount, cash_withheld, items_payload")
         .eq("order_id", order.id)
         .eq("status", "active");
       if (error) throw error;
-      let refundedAmount = 0;
+      // Cash side: money handed back plus any cashback reward kept out of it.
+      let refundedCash = 0;
+      let refundedWallet = 0;
       const refundedQty: Record<string, number> = {};
       for (const row of data ?? []) {
-        refundedAmount += Number(row.amount);
+        refundedCash += Number(row.amount) + Number(row.cash_withheld ?? 0);
+        refundedWallet += Number(row.wallet_amount ?? 0);
         for (const entry of (row.items_payload ?? []) as PayloadEntry[]) {
           if (entry.order_item_id) {
             refundedQty[entry.order_item_id] =
@@ -139,13 +163,19 @@ export function OrderRefundDialog({
           }
         }
       }
-      return { refundedAmount, refundedQty };
+      return { refundedCash, refundedWallet, refundedQty };
     },
   });
 
-  const paidTotal = (order?.order_payments ?? []).reduce((sum, p) => sum + Number(p.amount), 0);
-  const already = prior.data?.refundedAmount ?? 0;
-  const refundable = Math.max(0, paidTotal - already);
+  // The part paid from the customer's cashback wallet goes back to the wallet, not as cash.
+  const payments = order?.order_payments ?? [];
+  const paidTotal = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const walletPaid = payments
+    .filter((p) => normalizeTender(p.method_key) === "points")
+    .reduce((sum, p) => sum + Number(p.amount), 0);
+  const cashLeft = Math.max(0, paidTotal - walletPaid - (prior.data?.refundedCash ?? 0));
+  const walletLeft = Math.max(0, walletPaid - (prior.data?.refundedWallet ?? 0));
+  const refundable = cashLeft + walletLeft;
   const remainingOf = (id: string, qty: number) => qty - (prior.data?.refundedQty[id] ?? 0);
   const fullLines = activeItems
     .map((item) => ({ item, left: remainingOf(item.id, item.quantity) }))
@@ -159,17 +189,18 @@ export function OrderRefundDialog({
     .filter((entry): entry is { item: OrderDetails["order_items"][number]; st: LineState } =>
       Boolean(entry.st && entry.st.qty > 0),
     );
-  const estimate =
+  const share =
     mode === "full"
       ? refundable
-      : Math.min(
-          refundable,
-          ratio *
-            selected.reduce(
-              (sum, { item, st }) => sum + (Number(item.line_total) * st.qty) / item.quantity,
-              0,
-            ),
+      : ratio *
+        selected.reduce(
+          (sum, { item, st }) => sum + (Number(item.line_total) * st.qty) / item.quantity,
+          0,
         );
+  const walletBack =
+    mode === "full" ? walletLeft : paidTotal > 0 ? Math.min(walletLeft, (share * walletPaid) / paidTotal) : 0;
+  // Cash/card handed back; a cashback reward the customer already spent can still come off it.
+  const estimate = mode === "full" ? cashLeft : Math.min(cashLeft, Math.max(0, share - walletBack));
 
   const ready =
     reason.trim().length >= 3 &&
@@ -187,11 +218,11 @@ export function OrderRefundDialog({
         ...(bearer === "staff" ? { _staff_id: blamedId } : {}),
       };
       if (mode === "full") {
-        const { error } = await supabase.rpc("refund_order_full", common);
+        const { data, error } = await supabase.rpc("refund_order_full", common);
         if (error) throw error;
-        return;
+        return data as RefundResult | null;
       }
-      const { error } = await supabase.rpc("refund_order_items_attributed", {
+      const { data, error } = await supabase.rpc("refund_order_items_attributed", {
         ...common,
         _items: selected.map(({ item, st }) => ({
           order_item_id: item.id,
@@ -200,8 +231,9 @@ export function OrderRefundDialog({
         })),
       });
       if (error) throw error;
+      return data as RefundResult | null;
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       await Promise.all(
         [
           "orders",
@@ -214,7 +246,7 @@ export function OrderRefundDialog({
           "order-invoice",
         ].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
       );
-      toast.success(t("orders.refundDone"));
+      toast.success(t("orders.refundDone"), { description: refundSummary(result, currency, lang) });
       onClose();
     },
     onError: (error) => toast.error(friendlyError(error, lang)),
@@ -238,6 +270,8 @@ export function OrderRefundDialog({
           </DialogTitle>
           <DialogDescription>
             {t("orders.refundable")}: {formatMoney(refundable, currency, lang)}
+            {walletLeft > 0 &&
+              ` (${ar ? "منهم" : "of which"} ${formatMoney(walletLeft, currency, lang)} ${ar ? "يرجعوا لمحفظة الكاش باك" : "back to the cashback wallet"})`}
           </DialogDescription>
         </DialogHeader>
 
@@ -428,6 +462,12 @@ export function OrderRefundDialog({
               <div className="flex h-9 items-center rounded-md border border-border bg-muted px-3 font-mono font-bold tabular-nums">
                 {formatMoney(estimate, currency, lang)}
               </div>
+              {walletBack > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {ar ? "+ يرجع لمحفظة الكاش باك:" : "+ back to the cashback wallet:"}{" "}
+                  <span className="font-mono font-semibold">{formatMoney(walletBack, currency, lang)}</span>
+                </span>
+              )}
             </div>
           </div>
 
@@ -450,7 +490,7 @@ export function OrderRefundDialog({
               onChange={setBearer}
               staffId={blamedId}
               onStaffIdChange={setBlamedId}
-              amount={estimate}
+              amount={estimate + walletBack}
             />
           </div>
           {mode === "partial" && (

@@ -17,6 +17,7 @@ import type { HrRow } from "@/components/hr/EmployeeDrawer";
 import { supabase } from "@/integrations/supabase/client";
 import { formatMoney, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
+import { cafeToday } from "@/lib/pay-date";
 
 const METHODS = [
   { key: "cash", ar: "كاش من الخزنة", en: "Cash (drawer safe)" },
@@ -24,7 +25,7 @@ const METHODS = [
   { key: "bank", ar: "تحويل بنكي", en: "Bank transfer" },
 ] as const;
 
-const todayIso = () => new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Cairo" });
+const todayIso = () => cafeToday();
 
 /**
  * Pays one employee's salary for the selected month in a single step: the line

@@ -97,7 +97,7 @@ export function OrderDetailsDialog({
       if (!order) return [];
       const { data, error } = await supabase
         .from("order_refunds")
-        .select("id, kind, amount, reason, method_key, created_at, origin, items_payload")
+        .select("id, kind, amount, wallet_amount, reason, method_key, created_at, origin, items_payload")
         .eq("order_id", order.id)
         .eq("status", "active")
         .order("created_at", { ascending: false });

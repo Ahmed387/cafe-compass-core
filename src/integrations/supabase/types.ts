@@ -2013,6 +2013,8 @@ export type Database = {
           amount: number
           blamed_staff_id: string | null
           branch_id: string
+          cash_withheld: number
+          cashback_done: boolean
           company_id: string
           created_at: string
           created_by: string | null
@@ -2025,14 +2027,18 @@ export type Database = {
           order_item_id: string | null
           origin: string
           reason: string
+          reward_clawback: number
           shift_id: string | null
           status: Database["public"]["Enums"]["record_status"]
           tax_amount: number
+          wallet_amount: number
         }
         Insert: {
           amount: number
           blamed_staff_id?: string | null
           branch_id: string
+          cash_withheld?: number
+          cashback_done?: boolean
           company_id: string
           created_at?: string
           created_by?: string | null
@@ -2045,14 +2051,18 @@ export type Database = {
           order_item_id?: string | null
           origin?: string
           reason: string
+          reward_clawback?: number
           shift_id?: string | null
           status?: Database["public"]["Enums"]["record_status"]
           tax_amount?: number
+          wallet_amount?: number
         }
         Update: {
           amount?: number
           blamed_staff_id?: string | null
           branch_id?: string
+          cash_withheld?: number
+          cashback_done?: boolean
           company_id?: string
           created_at?: string
           created_by?: string | null
@@ -2065,9 +2075,11 @@ export type Database = {
           order_item_id?: string | null
           origin?: string
           reason?: string
+          reward_clawback?: number
           shift_id?: string | null
           status?: Database["public"]["Enums"]["record_status"]
           tax_amount?: number
+          wallet_amount?: number
         }
         Relationships: [
           {

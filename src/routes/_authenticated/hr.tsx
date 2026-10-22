@@ -23,7 +23,7 @@ import { EmployeeDrawer, JOB_TITLES, type HrRow } from "@/components/hr/Employee
 import { PaySalaryDialog, type IssuedSalary } from "@/components/hr/PaySalaryDialog";
 import { matches, SmartFilterBar } from "@/modules/shell/SmartFilterBar";
 import { KpiCard, KpiGrid } from "@/components/shared/KpiCard";
-import { businessMonth, monthBounds } from "@/core/finance/business-dates";
+import { addDays, businessDayStartIso, businessMonth, monthBounds } from "@/core/finance/business-dates";
 
 export const Route = createFileRoute("/_authenticated/hr")({
   head: () => ({
@@ -132,8 +132,8 @@ function HrPage() {
     queryFn: async () => {
       const { data, error } = await supabase.from("staff_penalties").select("amount, staff_id, created_at, user_profiles!staff_penalties_staff_id_fkey(display_name, first_name)")
         .eq("is_settled", false)
-        .gte("created_at", `${start}T00:00:00`)
-        .lte("created_at", `${end}T23:59:59.999`);
+        .gte("created_at", businessDayStartIso(start))
+        .lt("created_at", businessDayStartIso(addDays(end, 1)));
       if (error) throw error;
       return data ?? [];
     },

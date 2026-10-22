@@ -41,6 +41,7 @@ import { useAuth } from "@/lib/auth";
 import { formatMoney, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { buildProductPlan, tierLabel, type PlanTier } from "@/lib/product-plan";
+import { addDays, businessToday } from "@/core/finance/business-dates";
 
 export const Route = createFileRoute("/_authenticated/offers")({
   head: () => ({
@@ -85,9 +86,7 @@ const num = (v: number | string | null | undefined) => {
 const half = (n: number) => Math.round(n * 2) / 2;
 
 function isoDaysAgo(days: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return addDays(businessToday(), -days);
 }
 
 /** Suggested offer price: attractive discount but never under the safe floor. */
@@ -106,7 +105,7 @@ function OffersPage() {
   const canManage = can("products.update") || can("products.create");
 
   const from = isoDaysAgo(30);
-  const to = new Date().toISOString().slice(0, 10);
+  const to = businessToday();
   const money = (v: number) => formatMoney(v, currency, lang);
 
   const candidates = useQuery({

@@ -87,7 +87,7 @@ export type PayoutPreview = {
   sustainability: Sustainability;
   checks: Record<
     | "range_valid" | "no_overlap" | "no_open_shifts" | "no_open_orders" | "net_positive"
-    | "self_sustaining" | "fund_within_limit" | "partner_pool_positive" | "shares_total_100",
+    | "fund_within_limit" | "partner_pool_positive" | "shares_total_100",
     boolean
   >;
   overlaps: Array<{ id: string; from: string; to: string }>;

@@ -27,11 +27,10 @@ import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { buildProductPlan, tierLabel, type PlanTier } from "@/lib/product-plan";
+import { addDays, businessToday } from "@/core/finance/business-dates";
 
 function isoDaysAgo(days: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return addDays(businessToday(), -days);
 }
 
 export function AnalyticsPage() {
@@ -39,7 +38,7 @@ export function AnalyticsPage() {
   const { can, me } = useAuth();
   const currency = me?.company?.currency ?? "EGP";
   const [from, setFrom] = useState(isoDaysAgo(30));
-  const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
+  const [to, setTo] = useState(businessToday());
 
   const canView = can("analytics.view") || can("reports.sales");
 

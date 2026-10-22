@@ -65,7 +65,7 @@ function OrderInvoicePage() {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, order_number, order_type, status, subtotal, discount_amount, discount_reason, tax_amount, total, created_at, completed_at, customer_id, customer_name, customer_phone, notes, shift_id, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name, price_delta)), order_payments(method_key, amount, reference), order_refunds(id, amount, reason, method_key, created_at, status, origin, items_payload), partner_tab_orders(id, total_amount, is_settled, partners(name))",
+          "id, order_number, order_type, status, subtotal, discount_amount, discount_reason, tax_amount, total, created_at, completed_at, customer_id, customer_name, customer_phone, notes, shift_id, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name, price_delta)), order_payments(method_key, amount, reference), order_refunds(id, amount, wallet_amount, reason, method_key, created_at, status, origin, items_payload), partner_tab_orders(id, total_amount, is_settled, partners(name))",
         )
         .eq("id", orderId)
         .maybeSingle();

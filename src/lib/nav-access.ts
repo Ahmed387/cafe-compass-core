@@ -15,6 +15,7 @@ export const NAV_PERMISSIONS: Record<string, string[] | ["*"]> = {
 
   // Manager: operational floor, catalog, inventory, purchases, staff and reports.
   Manager: [
+    "/dashboard",
     "/operations",
     "/supply",
     "/finance",
@@ -43,6 +44,7 @@ export const NAV_PERMISSIONS: Record<string, string[] | ["*"]> = {
     "/users",
     "/staff",
     "/hr",
+    "/settings",
     "/guide",
   ],
 
@@ -68,6 +70,12 @@ export const NAV_PERMISSIONS: Record<string, string[] | ["*"]> = {
     "/guide",
   ],
 };
+
+/** A cashier with no manager/owner role: sees selling prices only, never costs. */
+export function isCashierOnly(roleNames: string[] | undefined): boolean {
+  const roles = roleNames ?? [];
+  return roles.includes("Cashier") && !roles.some((r) => r === "Super Admin" || r === "Manager" || r === "Partner");
+}
 
 export type RouteAccess = { unlimited: boolean; paths: string[]; governed: boolean };
 

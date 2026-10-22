@@ -20,13 +20,12 @@ import {
   type Suggestion,
 } from "@/lib/offer-advisor";
 import { isMissingFunction } from "@/lib/supabase-errors";
+import { addDays, businessToday } from "@/core/finance/business-dates";
 
 const PERIOD_DAYS = 30;
 
 function isoDaysAgo(days: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return addDays(businessToday(), -days);
 }
 
 const num = (v: unknown) => {
@@ -55,7 +54,7 @@ export function OfferAdvisorPanel({ lang, currency, isSuperAdmin, canManage, off
   const money = (v: number) => formatMoney(v, currency, lang);
   const [asked, setAsked] = useState(false);
   const from = isoDaysAgo(PERIOD_DAYS - 1);
-  const to = new Date().toISOString().slice(0, 10);
+  const to = businessToday();
 
   const data = useQuery({
     queryKey: ["offer-advisor", from, to],
@@ -98,7 +97,7 @@ export function OfferAdvisorPanel({ lang, currency, isSuperAdmin, canManage, off
     onError: (e) => toast.error(friendlyError(e, lang)),
   });
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = businessToday();
   const runningOffer = (productId: string) =>
     offers.find((o) => o.product_id === productId && o.is_active && (!o.ends_at || o.ends_at >= today)) ?? null;
   const all = data.data ? buildSuggestions(data.data, PERIOD_DAYS, lang).slice(0, 12) : [];
@@ -226,7 +225,7 @@ function SuggestionCard({ s, lang, money, isSuperAdmin, canManage, running, onEd
 
   const approve = useMutation({
     mutationFn: async () => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = businessToday();
       const { error } = await supabase.rpc("save_product_offer", {
         _payload: {
           offer_type: "single",

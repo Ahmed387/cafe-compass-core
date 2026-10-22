@@ -292,12 +292,18 @@ BEGIN
     PERFORM pg_temp.ok('29 الكاشير ميقدرش يصفر المحافظ', false, 'قدر!');
   EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.ok('29 الكاشير ميقدرش يصفر المحافظ', true, SQLERRM); END;
   -- 31. Internal helpers must not be callable straight from the app.
+  -- As the app's own database role: the owner role may always call them.
   BEGIN
+    EXECUTE 'SET LOCAL ROLE authenticated';
     PERFORM public._charge_staff(_co, 5, 'staff',
       (SELECT id FROM public.user_profiles WHERE company_id = _co AND is_active AND id <> public.current_profile_id() LIMIT 1),
       'TEST', NULL, NULL, 'manual');
+    EXECUTE 'RESET ROLE';
     PERFORM pg_temp.ok('31 الكاشير ميقدرش يخصم من زميله بنداء داخلي', false, 'قدر يسجل خصم على زميله!');
-  EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.ok('31 الكاشير ميقدرش يخصم من زميله بنداء داخلي', true, SQLERRM); END;
+  EXCEPTION WHEN insufficient_privilege THEN
+    EXECUTE 'RESET ROLE';
+    PERFORM pg_temp.ok('31 الكاشير ميقدرش يخصم من زميله بنداء داخلي', true, SQLERRM);
+  END;
   -- Row-level security only applies to the app's database role.
   BEGIN
     EXECUTE 'SET LOCAL ROLE authenticated';

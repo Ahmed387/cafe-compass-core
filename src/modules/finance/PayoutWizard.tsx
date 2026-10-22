@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { addDays, businessToday, rangeLabel } from "@/core/finance/business-dates";
+import { addDays, businessToday, previousMonth, rangeLabel } from "@/core/finance/business-dates";
 import { supabase } from "@/integrations/supabase/client";
 import { formatMoney, formatPercent, friendlyError } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -24,7 +24,6 @@ const CHECK_TEXT: Record<keyof PayoutPreview["checks"], { ar: string; en: string
   no_open_shifts: { ar: "مفيش وردية مفتوحة في الفترة", en: "No open shift in the range" },
   no_open_orders: { ar: "مفيش طلبات متدفعتش في الفترة", en: "No unpaid orders in the range" },
   net_positive: { ar: "فيه ربح موجب بعد الاحتياطي ورواتب الإدارة", en: "Positive profit after reserve and management pay" },
-  self_sustaining: { ar: "المكان صارف على نفسه (٣ شهور رابحة ورا بعض)", en: "Self-sustaining (3 profitable months in a row)" },
   fund_within_limit: { ar: "صندوق التطوير مش أكبر من الربح المتاح", en: "Development fund within available profit" },
   partner_pool_positive: { ar: "فاضل نصيب للشركاء بعد الصندوق", en: "Something left for partners after the fund" },
   shares_total_100: { ar: "نسب الشركاء مجموعها ١٠٠٪", en: "Partner shares total 100%" },
@@ -146,11 +145,37 @@ export function PayoutWizard({
                 <Input id="po-to" type="date" value={to} min={from} max={businessToday()} onChange={(e) => setTo(e.target.value)} />
               </div>
             </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const m = previousMonth();
+                  setFrom(m.start);
+                  setTo(m.end);
+                }}
+              >
+                {ar ? "الشهر اللي فات" : "Last month"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setFrom(defaultFrom);
+                  setTo(yesterday < defaultFrom ? businessToday() : yesterday);
+                }}
+              >
+                {ar ? "من بعد آخر توزيع لحد امبارح" : "Since the last payout"}
+              </Button>
+            </div>
             <p className="rounded-xl bg-muted p-3 text-xs leading-6 text-muted-foreground">
               {ar
-                ? "الأيام بتتحسب بتوقيت القاهرة. اقترحنا عليك تبدأ من اليوم اللي بعد آخر توزيع عشان مفيش يوم يتوزع مرتين."
-                : "Days follow Cairo time. We suggest starting right after the last payout so no day is paid twice."}
+                ? "اختار أي فترة، حتى لو شهر واحد. اليوم بيبدأ الساعة 6 الصبح بتوقيت القاهرة. اقترحنا عليك تبدأ من اليوم اللي بعد آخر توزيع عشان مفيش يوم يتوزع مرتين."
+                : "Pick any period, even a single month. Each day starts at 6 AM Cairo time. We suggest starting right after the last payout so no day is paid twice."}
             </p>
+            {p && <PeriodSummary pnl={p.pnl} money={money} lang={lang} />}
             {p && (
               <div className="grid gap-2 sm:grid-cols-3">
                 <Figure label={ar ? "صافي ربح الفترة" : "Net profit"} value={money(p.net_profit)} tone={p.net_profit < 0 ? "bad" : "good"} />
@@ -296,6 +321,40 @@ function ChecksList({
         </li>
       ))}
     </ul>
+  );
+}
+
+/** What happened in the chosen period: sales, what came off them, and the costs, down to net profit. */
+function PeriodSummary({ pnl, money, lang }: { pnl: PayoutPreview["pnl"]; money: (v: number) => string; lang: Lang }) {
+  const ar = lang === "ar";
+  const v = (x: number | null | undefined) => Number(x ?? 0);
+  const discounts = v(pnl.promo_discount) + v(pnl.manual_discounts) + v(pnl.points_redeemed);
+  const waste = v(pnl.waste_business ?? pnl.waste_cost);
+  const shortage = v(pnl.cash_shortage) - v(pnl.cash_over) + v(pnl.stocktake_shortage);
+  return (
+    <div className="space-y-2 rounded-xl border p-4 text-sm">
+      <p className="font-semibold">
+        {ar ? `اللي حصل في الفترة (${rangeLabel(pnl.from, pnl.to, lang)})` : `What happened (${rangeLabel(pnl.from, pnl.to, lang)})`}
+      </p>
+      <Row label={ar ? "عدد الفواتير" : "Invoices"} value={String(v(pnl.orders_count))} />
+      <Row label={ar ? "إجمالي المبيعات" : "Gross sales"} value={money(v(pnl.gross_sales))} />
+      <Row label={ar ? "− العروض والخصومات والكاش باك" : "− Offers, discounts and cashback"} value={money(discounts)} />
+      <Row label={ar ? "− المرتجعات" : "− Refunds"} value={money(v(pnl.refunds_total))} />
+      <Row strong label={ar ? "صافي المبيعات" : "Net sales"} value={money(v(pnl.revenue))} />
+      <Row label={ar ? "− تكلفة الخامات المباعة" : "− Cost of ingredients sold"} value={money(v(pnl.cogs))} />
+      <Row label={ar ? "− الهالك على المكان" : "− Waste carried by the café"} value={money(waste)} />
+      <Row label={ar ? "− عجز الدرج والمخزن (بعد خصم الزيادة)" : "− Drawer and stock shortages (net of overs)"} value={money(shortage)} />
+      <Row label={ar ? "− المصاريف" : "− Expenses"} value={money(v(pnl.expenses_total))} />
+      <Row label={ar ? "− المرتبات" : "− Payroll"} value={money(v(pnl.payroll_total))} />
+      <Row strong label={ar ? "صافي الربح" : "Net profit"} value={money(v(pnl.net_profit))} />
+      {v(pnl.expenses_pending_count) > 0 && (
+        <p className="rounded-lg bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
+          {ar
+            ? `فيه ${v(pnl.expenses_pending_count)} مصروف لسه مستني الاعتماد (${money(v(pnl.expenses_pending))}) ومش محسوب هنا.`
+            : `${v(pnl.expenses_pending_count)} expense(s) still waiting for approval (${money(v(pnl.expenses_pending))}) are not counted.`}
+        </p>
+      )}
+    </div>
   );
 }
 

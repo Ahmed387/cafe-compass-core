@@ -1,3 +1,5 @@
+import { businessToday } from "@/core/finance/business-dates";
+import { isCashierOnly } from "@/lib/nav-access";
 import { InfoTip } from "@/components/shared/InfoTip";
 import { ShiftPaymentBreakdown } from "@/modules/operations/ShiftLedgerKpis";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -181,6 +183,7 @@ function PosPage() {
   const { t, lang } = useI18n();
   const { can, me, currentBranchId } = useAuth();
   const isSuperAdmin = me?.roleNames.includes("Super Admin") ?? false;
+  const cashierOnly = isCashierOnly(me?.roleNames);
   const queryClient = useQueryClient();
   const currency = me?.company?.currency ?? "EGP";
   const label = (en: string, ar: string | null | undefined) => (lang === "ar" ? ar || en : en);
@@ -555,7 +558,7 @@ function PosPage() {
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
     queryFn: async () => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = businessToday();
       const { data, error } = await supabase
         .from("product_offers")
         .select(
@@ -970,7 +973,7 @@ function PosPage() {
       })),
       refunds:
         shiftRefunds.data && shiftRefunds.data.count > 0
-          ? { total: shiftRefunds.data.total, cash: shiftRefunds.data.cash, waste: shiftRefunds.data.waste }
+          ? { total: shiftRefunds.data.total, cash: shiftRefunds.data.cash, waste: cashierOnly ? undefined : shiftRefunds.data.waste }
           : null,
       cash: {
         opening: preview.opening_cash,
@@ -2849,10 +2852,13 @@ function PosPage() {
                   label={t("pos.cashRefunds")}
                   value={formatMoney(shiftRefunds.data.cash, currency, lang)}
                 />
-                <Row
-                  label={t("refunds.waste")}
-                  value={formatMoney(shiftRefunds.data.waste, currency, lang)}
-                />
+                {/* Waste is valued at cost: the cashier sees selling prices only. */}
+                {!cashierOnly && (
+                  <Row
+                    label={t("refunds.waste")}
+                    value={formatMoney(shiftRefunds.data.waste, currency, lang)}
+                  />
+                )}
               </CollapsibleSection>
             )}
             {cashPreview.data && (
