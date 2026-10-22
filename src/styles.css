@@ -328,8 +328,30 @@
   70%, 100% { background-position: -80% 0; }
 }
 
+/* Menu hero: slow cinematic drift from right to left on each venue photo. */
+.soft-menu-drift {
+  animation: soft-drift 9s linear both;
+}
+
+@keyframes soft-drift {
+  from { transform: scale(1.14) translateX(4%); }
+  to { transform: scale(1.14) translateX(-4%); }
+}
+
+/* Endless right-to-left strip of venue photos (the track holds four copies, so half of it covers wide screens). */
+.soft-menu-marquee {
+  animation: soft-marquee 70s linear infinite;
+}
+
+@keyframes soft-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .soft-menu-shimmer { animation: none; }
+  .soft-menu-shimmer,
+  .soft-menu-drift,
+  .soft-menu-marquee { animation: none; }
 }
 
 /* Colorful, lifted card surface used by every <Card /> in the app. */
