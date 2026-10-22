@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import bambooSilhouette from "@/assets/venue/bamboo-silhouette.jpg";
 import entrance from "@/assets/venue/entrance.jpg";
 import kiosk from "@/assets/venue/kiosk.jpg";
-import loungeBamboo from "@/assets/venue/lounge-bamboo.jpg";
 import terrace from "@/assets/venue/terrace.jpg";
 import { MenuMusic } from "@/components/menu/MenuMusic";
 import { formatMoney } from "@/lib/format";
@@ -44,7 +43,6 @@ const VENUE_PHOTOS = [
   { src: entrance, ar: "بوابة 20s Specialty Coffee المضيئة", en: "The lit 20s Specialty Coffee gate" },
   { src: kiosk, ar: "بار 20s على الكورنيش السياحي بالمنيا الجديدة", en: "The 20s bar at the New Minya tourist corniche" },
   { src: terrace, ar: "التراس تحت الشجرة بإضاءة دافئة", en: "The terrace under the tree in warm light" },
-  { src: loungeBamboo, ar: "جلسة جنب سور البامبو", en: "Seating by the bamboo fence" },
 ];
 const SLIDE_MS = 7000;
 
