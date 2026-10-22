@@ -1,8 +1,14 @@
 import { netInvoiceTotal, saleRefundTotal } from "@/core/finance/formulas";
 import { useQuery } from "@tanstack/react-query";
+import { Ban, Undo2 } from "lucide-react";
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { NoPermission, PageHeader } from "@/components/layout/AppShell";
+import { OrderCancelDialog } from "@/components/orders/OrderCancelDialog";
+import type { OrderDetails } from "@/components/orders/OrderDetailsDialog";
+import { OrderRefundDialog } from "@/components/orders/OrderRefundDialog";
+import { useOrderShiftAccess } from "@/components/orders/useOrderShiftAccess";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +24,7 @@ import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { invoiceSequence } from "@/lib/receipt";
+import { tenderLabel } from "@/lib/tender";
 
 export const Route = createFileRoute("/_authenticated/orders/$orderId")({
   head: () => ({
@@ -48,6 +55,8 @@ function OrderInvoicePage() {
   const { can, me } = useAuth();
   const currency = me?.company?.currency ?? "EGP";
   const canView = can("pos.view") || can("reports.sales");
+  const [refundMode, setRefundMode] = useState<"full" | "partial" | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const order = useQuery({
     queryKey: ["order-invoice", orderId],
@@ -56,7 +65,7 @@ function OrderInvoicePage() {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, order_number, order_type, status, subtotal, discount_amount, discount_reason, tax_amount, total, created_at, completed_at, customer_id, customer_name, customer_phone, notes, shift_id, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, order_item_modifiers(name, price_delta)), order_payments(method_key, amount, reference), order_refunds(id, amount, reason, method_key, created_at, status, origin, items_payload), partner_tab_orders(id, total_amount, is_settled, partners(name))",
+          "id, order_number, order_type, status, subtotal, discount_amount, discount_reason, tax_amount, total, created_at, completed_at, customer_id, customer_name, customer_phone, notes, shift_id, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name, price_delta)), order_payments(method_key, amount, reference), order_refunds(id, amount, reason, method_key, created_at, status, origin, items_payload), partner_tab_orders(id, total_amount, is_settled, partners(name))",
         )
         .eq("id", orderId)
         .maybeSingle();
@@ -77,6 +86,8 @@ function OrderInvoicePage() {
       return { ...data, shiftNo };
     },
   });
+
+  const { shiftClosed, canRefund } = useOrderShiftAccess(order.data?.shift_id);
 
   if (!canView) return <NoPermission message={t("common.noAccess")} />;
 
@@ -110,6 +121,13 @@ function OrderInvoicePage() {
   type TabRow = { total_amount: number; is_settled: boolean; partners: { name: string } | null };
   const tabRel = row.partner_tab_orders as unknown as TabRow | TabRow[] | null;
   const tab = Array.isArray(tabRel) ? tabRel[0] : tabRel;
+  const paid = (row.order_payments ?? []).length > 0;
+  const canReturn = canRefund && (row.status === "completed" || row.status === "partially_refunded") && paid && net > 0;
+  // Server rule cancel_pos_order: only unpaid orders (pending / open, or an unsettled partner-tab invoice).
+  const canCancel =
+    (row.status === "pending" || row.status === "open" || (row.status === "completed" && Boolean(tab) && !paid)) &&
+    !shiftClosed &&
+    (can("pos.cancel_order") || can("pos.create_order"));
 
   const statusLabel =
     row.status === "cancelled"
@@ -138,7 +156,29 @@ function OrderInvoicePage() {
         <Button size="sm" onClick={() => window.print()}>
           {t("orders.print")}
         </Button>
+        {canReturn && (
+          <>
+            <Button size="sm" variant="outline" icon={Undo2} onClick={() => setRefundMode("partial")}>
+              {lang === "ar" ? "مرتجع جزئي" : "Partial return"}
+            </Button>
+            <Button size="sm" variant="destructive" icon={Undo2} onClick={() => setRefundMode("full")}>
+              {lang === "ar" ? "مرتجع كلي" : "Full return"}
+            </Button>
+          </>
+        )}
+        {canCancel && (
+          <Button size="sm" variant="destructive" icon={Ban} onClick={() => setCancelling(true)}>
+            {lang === "ar" ? "إلغاء الطلب" : "Cancel order"}
+          </Button>
+        )}
       </div>
+      {shiftClosed && row.status !== "cancelled" && (
+        <p className="mb-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground print:hidden">
+          {lang === "ar"
+            ? "الوردية بتاعة الفاتورة دي اتقفلت، فالمرتجع والإلغاء مش متاحين."
+            : "This invoice's shift is closed: returns and cancellation are no longer available."}
+        </p>
+      )}
 
       <div className="rounded-lg border border-border bg-card p-5 font-mono">
         <div className="grid gap-2 border-b border-dashed border-border pb-4 text-sm sm:grid-cols-2">
@@ -241,7 +281,7 @@ function OrderInvoicePage() {
           <div className="mt-4 grid gap-1 border-t border-dashed border-border pt-4 text-sm">
             {(row.order_payments ?? []).map((payment, index) => (
               <div key={`${payment.method_key}-${index}`} className="flex justify-between">
-                <span className="text-muted-foreground">{payment.method_key}</span>
+                <span className="text-muted-foreground">{tenderLabel(payment.method_key, lang)}</span>
                 <span className="tabular-nums">{formatMoney(payment.amount, currency, lang)}</span>
               </div>
             ))}
@@ -285,6 +325,18 @@ function OrderInvoicePage() {
           </div>
         )}
       </div>
+
+      <OrderRefundDialog
+        key={`${row.id}-${refundMode ?? "closed"}`}
+        order={row as unknown as OrderDetails}
+        open={refundMode !== null}
+        initialMode={refundMode ?? "partial"}
+        onClose={() => setRefundMode(null)}
+      />
+      <OrderCancelDialog
+        order={cancelling ? { id: row.id, number: row.order_number } : null}
+        onClose={() => setCancelling(false)}
+      />
     </div>
   );
 }

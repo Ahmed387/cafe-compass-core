@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { EmptyState, NoPermission, PageHeader } from "@/components/layout/AppShell";
 import { CustomerProfileDialog } from "@/components/customers/CustomerProfileDialog";
 import { OrderDetailsDialog, type OrderDetails } from "@/components/orders/OrderDetailsDialog";
-import { PreparedDisposition, useDisposition } from "@/components/orders/PreparedDisposition";
+import { OrderCancelDialog } from "@/components/orders/OrderCancelDialog";
 import { Pagination } from "@/components/shared";
 import { ShortageBearerCell } from "@/modules/operations/ShortageBearerCell";
 import { ShiftRefundBearersButton } from "@/modules/operations/ShiftRefundBearersButton";
@@ -42,6 +42,7 @@ import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatMoney, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { invoiceSequence } from "@/lib/receipt";
+import { tenderLabel } from "@/lib/tender";
 import {
   filterShifts,
   ShiftFilterBar,
@@ -77,15 +78,6 @@ export const Route = createFileRoute("/_authenticated/orders/")({
 });
 
 const PAGE_SIZE = 25;
-
-/** Human name of a tender key for the invoices table and export. */
-function tenderLabel(key: string, lang: "ar" | "en") {
-  const k = normalizeTender(key);
-  const ar: Record<string, string> = { cash: "كاش", instapay: "إنستاباي", wallet: "محفظة", visa: "فيزا", points: "نقاط", partner_tab: "حساب شريك" };
-  const en: Record<string, string> = { cash: "Cash", instapay: "InstaPay", wallet: "Wallet", visa: "Card", points: "Points", partner_tab: "Partner tab" };
-  if (key === "cashback") return lang === "ar" ? "كاش باك" : "Cashback";
-  return (lang === "ar" ? ar : en)[k] ?? key;
-}
 
 function isoDay(offsetDays: number) {
   const d = new Date();
@@ -125,8 +117,6 @@ function OrdersPage() {
   const queryClient = useQueryClient();
   const currency = me?.company?.currency ?? "EGP";
   const [cancelOrder, setCancelOrder] = useState<{ id: string; number: string } | null>(null);
-  const cancelDisposition = useDisposition();
-  const [reason, setReason] = useState("");
   const [detailsOrder, setDetailsOrder] = useState<OrderDetails | null>(null);
   const [profileCustomer, setProfileCustomer] = useState<{
     id: string;
@@ -594,27 +584,6 @@ function OrdersPage() {
     }
   };
 
-  const cancel = useMutation({
-    mutationFn: async () => {
-      if (!cancelOrder) throw new Error("Missing order");
-      const { error } = await supabase.rpc("cancel_pos_order", {
-        _order_id: cancelOrder.id,
-        _reason: reason.trim(),
-        ...cancelDisposition.args,
-      });
-      if (error) throw error;
-    },
-    onSuccess: async () => {
-      setCancelOrder(null);
-      setReason("");
-      await queryClient.invalidateQueries({ queryKey: ["orders"] });
-      await queryClient.invalidateQueries({ queryKey: ["orders-summary"] });
-      await queryClient.invalidateQueries({ queryKey: ["branch-stock"] });
-      toast.success(t("orders.cancelled"));
-    },
-    onError: (error) => toast.error(friendlyError(error, lang)),
-  });
-
   const deliver = useMutation({
     mutationFn: async (orderId: string) => {
       const { error } = await supabase.rpc("mark_order_delivered", { _order_id: orderId });
@@ -798,16 +767,16 @@ function OrdersPage() {
           {rows.length === 0 ? (
             <EmptyState message={t("orders.empty")} />
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-border bg-card">
+            <div dir={ar ? "rtl" : "ltr"} className="overflow-x-auto rounded-lg border border-border bg-card">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-20 whitespace-nowrap text-start">#</TableHead>
+                    <TableHead className="w-16 whitespace-nowrap text-center">#</TableHead>
                     <TableHead className="w-44 whitespace-nowrap text-center">
                       {t("common.date")}
                     </TableHead>
-                    <TableHead className="min-w-40 text-start">{t("pos.customer")}</TableHead>
-                    <TableHead className="min-w-32 text-start">{t("orders.cashier")}</TableHead>
+                    <TableHead className="min-w-32 text-center">{t("pos.customer")}</TableHead>
+                    <TableHead className="min-w-32 text-center">{t("orders.cashier")}</TableHead>
                     <TableHead className="w-20 whitespace-nowrap text-center">
                       {t("orders.shiftNo")}
                     </TableHead>
@@ -815,19 +784,19 @@ function OrdersPage() {
                       {t("orders.type")}
                     </TableHead>
                     <TableHead className="min-w-44 text-start">{t("orders.items")}</TableHead>
-                    <TableHead className="w-28 whitespace-nowrap text-center">
+                    <TableHead className="w-32 whitespace-nowrap text-center">
                       {t("pos.method")}
                     </TableHead>
-                    <TableHead className="w-28 whitespace-nowrap text-end">
+                    <TableHead className="w-28 whitespace-nowrap text-center">
                       {t("orders.grossTotal")}
                     </TableHead>
-                    <TableHead className="w-28 whitespace-nowrap text-end">
+                    <TableHead className="w-28 whitespace-nowrap text-center">
                       {t("orders.refundedAmount")}
                     </TableHead>
-                    <TableHead className="w-28 whitespace-nowrap text-end">
+                    <TableHead className="w-28 whitespace-nowrap text-center">
                       {t("orders.netTotal")}
                     </TableHead>
-                    <TableHead className="w-32 whitespace-nowrap text-center">
+                    <TableHead className="w-36 whitespace-nowrap text-center">
                       {t("common.status")}
                     </TableHead>
                     <TableHead className="w-56 whitespace-nowrap text-center">
@@ -859,13 +828,13 @@ function OrdersPage() {
                         className="cursor-pointer"
                         onDoubleClick={() => setDetailsOrder(order as unknown as OrderDetails)}
                       >
-                        <TableCell className="w-20 whitespace-nowrap text-start font-mono font-bold text-primary">
+                        <TableCell className="w-16 whitespace-nowrap text-center font-mono font-bold text-primary">
                           {invoiceSequence(order.order_number)}
                         </TableCell>
                         <TableCell className="w-44 whitespace-nowrap text-center">
                           {formatDateTime(order.created_at, lang)}
                         </TableCell>
-                        <TableCell className="min-w-40 text-start">
+                        <TableCell className="min-w-32 text-center">
                           {order.customer_id ? (
                             <button
                               type="button"
@@ -886,7 +855,7 @@ function OrdersPage() {
                             </span>
                           )}
                         </TableCell>
-                        <TableCell className="min-w-32 text-start">{cashierName}</TableCell>
+                        <TableCell className="min-w-32 text-center">{cashierName}</TableCell>
                         <TableCell className="w-20 whitespace-nowrap text-center font-mono tabular-nums">
                           {order.shift_id ? (shiftNumbers.data?.[order.shift_id] ?? "—") : "—"}
                         </TableCell>
@@ -901,19 +870,29 @@ function OrdersPage() {
                             )
                             .join(", ")}
                         </TableCell>
-                        <TableCell className="w-28 text-center text-xs">
-                          {onPartnerTab
-                            ? t("orders.partnerTab")
-                            : order.order_payments.length > 1
-                              ? order.order_payments
-                                  .map((p) => `${tenderLabel(p.method_key, lang)} ${formatMoney(Number(p.amount), currency, lang)}`)
-                                  .join(" + ")
-                              : order.order_payments.map((p) => tenderLabel(p.method_key, lang)).join(", ")}
+                        <TableCell className="w-32 text-center text-xs">
+                          {onPartnerTab ? (
+                            t("orders.partnerTab")
+                          ) : order.order_payments.length > 1 ? (
+                            // Split payment: one line per method with the amount paid by it.
+                            <div className="flex flex-col items-center gap-0.5">
+                              {order.order_payments.map((p, index) => (
+                                <span key={`${p.method_key}-${index}`} className="whitespace-nowrap">
+                                  {tenderLabel(p.method_key, lang)}{" "}
+                                  <span className="tabular-nums text-muted-foreground">
+                                    {formatMoney(Number(p.amount), currency, lang)}
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            order.order_payments.map((p) => tenderLabel(p.method_key, lang)).join(", ")
+                          )}
                         </TableCell>
-                        <TableCell className="w-28 whitespace-nowrap text-end font-mono font-semibold tabular-nums">
+                        <TableCell className="w-28 whitespace-nowrap text-center font-mono font-semibold tabular-nums">
                           {formatMoney(order.total, currency, lang)}
                         </TableCell>
-                        <TableCell className="w-28 whitespace-nowrap text-end font-mono text-xs tabular-nums">
+                        <TableCell className="w-28 whitespace-nowrap text-center font-mono text-xs tabular-nums">
                           {refundedAmount > 0 ? (
                             <span className="font-medium text-destructive">
                               -{formatMoney(refundedAmount, currency, lang)}
@@ -922,7 +901,7 @@ function OrdersPage() {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
-                        <TableCell className="w-28 whitespace-nowrap text-end font-mono font-bold tabular-nums text-primary">
+                        <TableCell className="w-28 whitespace-nowrap text-center font-mono font-bold tabular-nums text-primary">
                           {formatMoney(netTotal, currency, lang)}
                         </TableCell>
                         <TableCell className="w-36 text-center">
@@ -991,8 +970,6 @@ function OrdersPage() {
                                   variant="outline"
                                   onClick={(event) => {
                                     event.stopPropagation();
-                                    cancelDisposition.reset();
-                                    setReason("");
                                     setCancelOrder({ id: order.id, number: order.order_number });
                                   }}
                                 >
@@ -1188,41 +1165,7 @@ function OrdersPage() {
         )}
       </Tabs>
 
-      <Dialog open={Boolean(cancelOrder)} onOpenChange={(open) => !open && setCancelOrder(null)}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>
-              {t("orders.cancel")} — #{invoiceSequence(cancelOrder?.number ?? "1")}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <PreparedDisposition
-              idPrefix="cancel"
-              value={cancelDisposition.value}
-              onChange={cancelDisposition.setValue}
-            />
-            <div className="grid gap-1.5">
-              <Label htmlFor="reason" className="text-xs text-muted-foreground">
-                {t("orders.reason")}
-              </Label>
-              <Input id="reason" value={reason} onChange={(e) => setReason(e.target.value)} />
-              <p className="text-xs text-muted-foreground">{t("orders.cancelHint")}</p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelOrder(null)}>
-              {t("common.cancel")}
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={reason.trim().length < 3 || !cancelDisposition.ready || cancel.isPending}
-              onClick={() => cancel.mutate()}
-            >
-              {t("orders.confirmCancel")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <OrderCancelDialog order={cancelOrder} onClose={() => setCancelOrder(null)} />
 
       <OrderDetailsDialog
         order={detailsOrder}

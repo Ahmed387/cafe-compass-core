@@ -94,17 +94,19 @@ export function OrderRefundDialog({
   order,
   open,
   onClose,
+  initialMode = "partial",
 }: {
   order: OrderDetails | null;
   open: boolean;
   onClose: () => void;
+  initialMode?: Mode;
 }) {
   const { t, lang } = useI18n();
   const ar = lang === "ar";
   const { me } = useAuth();
   const currency = me?.company?.currency ?? "EGP";
   const queryClient = useQueryClient();
-  const [mode, setMode] = useState<Mode>("partial");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [lines, setLines] = useState<Record<string, LineState>>({});
   const [reason, setReason] = useState("");
   const [method, setMethod] = useState("cash");
@@ -209,6 +211,7 @@ export function OrderRefundDialog({
           "refunds-log",
           "customer-refunds",
           "branch-stock",
+          "order-invoice",
         ].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
       );
       toast.success(t("orders.refundDone"));

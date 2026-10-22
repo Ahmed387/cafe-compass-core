@@ -60,11 +60,13 @@ export function BarLowStockAlert({ items, showLink }: { items: BarLowItem[]; sho
 export function LowStockCardBadge({ items }: { items: BarLowItem[] | undefined }) {
   if (!items?.length) return null;
   return (
+    // A small icon under the sold-out toggle, so it never covers the product name.
     <span
-      title={items.map((i) => i.name).join("، ")}
-      className="pointer-events-none absolute start-2 bottom-2 z-10 flex items-center gap-1 rounded-full bg-destructive px-2 py-0.5 text-[10px] font-semibold text-destructive-foreground"
+      title={`مخزون البار منخفض: ${items.map((i) => i.name).join("، ")}`}
+      className="absolute start-2 top-11 z-10 grid size-7 place-items-center rounded-full bg-destructive text-destructive-foreground shadow-sm ring-2 ring-background"
     >
-      <AlertTriangle className="h-3 w-3" /> مخزون البار منخفض
+      <AlertTriangle className="size-3.5" aria-hidden />
+      <span className="sr-only">مخزون البار منخفض</span>
     </span>
   );
 }
