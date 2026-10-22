@@ -43,6 +43,14 @@ export const Route = createFileRoute("/_authenticated/staff/$userId")({
   component: StaffDetailPage,
 });
 
+const ATTENDANCE_STATUS_KEYS: Record<string, string> = {
+  present: "att.present",
+  absent: "att.absent",
+  leave: "att.leave",
+  half_day: "att.halfDay",
+  permission: "att.permission",
+};
+
 function StaffDetailPage() {
   const { userId } = Route.useParams();
   const { t, lang } = useI18n();
@@ -121,7 +129,7 @@ function StaffDetailPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from("attendance")
-        .select("work_date, check_in, check_out, minutes_worked")
+        .select("work_date, status")
         .eq("user_id", userId)
         .order("work_date", { ascending: false })
         .limit(10);
@@ -371,7 +379,7 @@ function StaffDetailPage() {
                 >
                   <span>{row.work_date}</span>
                   <span className="text-muted-foreground">
-                    {Math.round((row.minutes_worked ?? 0) / 6) / 10} {t("kds.min")}
+                    {t(ATTENDANCE_STATUS_KEYS[row.status] ?? row.status)}
                   </span>
                 </div>
               ))

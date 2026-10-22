@@ -113,11 +113,10 @@ function HrPage() {
       rows.reduce(
         (a, r) => ({
           net: a.net + Number(r.net_pay),
-          hours: a.hours + Number(r.worked_hours),
           pen: a.pen + Number(r.penalties),
           bon: a.bon + Number(r.bonuses),
         }),
-        { net: 0, hours: 0, pen: 0, bon: 0 },
+        { net: 0, pen: 0, bon: 0 },
       ),
     [rows],
   );
@@ -183,8 +182,8 @@ function HrPage() {
         title={ar ? "الرواتب والمستحقات" : "Payroll & salaries"}
         description={
           ar
-            ? "الراتب النسبي حسب تاريخ التعيين، ساعات العمل، الجزاءات والمكافآت، وصافي الدفع"
-            : "Prorated salary by hire date, worked hours, penalties, bonuses and net pay"
+            ? "الراتب النسبي حسب تاريخ التعيين، أيام الحضور، الجزاءات والمكافآت، وصافي الدفع"
+            : "Prorated salary by hire date, days present, penalties, bonuses and net pay"
         }
         action={
           <div className="flex flex-wrap items-end gap-2">
@@ -200,7 +199,7 @@ function HrPage() {
       <KpiGrid cols={3}>
         <KpiCard label={ar ? "إجمالي الموظفين النشطين" : "Active staff"} value={shownRows.length} tone="brand" formula={ar ? "عدد الموظفين النشطين المطابقين للبحث." : "Active employees matching the search."} details={<div className="space-y-2">{shownRows.map((row) => <div key={row.user_id} className="flex justify-between gap-3 rounded-lg border border-border p-3 text-sm"><span>{row.employee_name}</span><span className="text-muted-foreground">{row.job_title}</span></div>)}</div>} />
         <KpiCard label={ar ? "الجزاءات المعلقة (الشهر)" : "Pending penalties (month)"} value={money((pendingPenalties.data ?? []).reduce((sum, row) => sum + Number(row.amount), 0))} tone={(pendingPenalties.data ?? []).length > 0 ? "bad" : undefined} formula={ar ? "مجموع الجزاءات غير المسوّاة المسجلة داخل الشهر المختار." : "Unsettled penalties recorded in the selected month."} details={<div className="space-y-2">{(pendingPenalties.data ?? []).map((row, index) => { const profile = row.user_profiles as unknown as { display_name: string | null; first_name: string } | null; return <div key={`${row.staff_id}-${index}`} className="flex justify-between gap-3 rounded-lg border border-border p-3 text-sm"><span>{profile?.display_name || profile?.first_name || "—"}</span><span className="font-semibold tabular-nums text-destructive">{money(Number(row.amount))}</span></div>; })}</div>} />
-        <KpiCard label={ar ? "إجمالي الرواتب" : "Total payroll"} value={money(shownRows.reduce((s, r) => s + Number(r.net_pay), 0))} hint={`${ar ? "ساعات" : "Hours"}: ${totals.hours.toFixed(1)}`} formula={ar ? "مجموع صافي رواتب الموظفين الظاهرين بعد الجزاءات والمكافآت." : "Sum of displayed employees' net pay after penalties and bonuses."} details={<div className="space-y-2">{shownRows.map((row) => <div key={row.user_id} className="flex justify-between gap-3 rounded-lg border border-border p-3 text-sm"><span>{row.employee_name}</span><span className="font-semibold tabular-nums">{money(Number(row.net_pay))}</span></div>)}</div>} />
+        <KpiCard label={ar ? "إجمالي الرواتب" : "Total payroll"} value={money(shownRows.reduce((s, r) => s + Number(r.net_pay), 0))} formula={ar ? "مجموع صافي رواتب الموظفين الظاهرين بعد الجزاءات والمكافآت." : "Sum of displayed employees' net pay after penalties and bonuses."} details={<div className="space-y-2">{shownRows.map((row) => <div key={row.user_id} className="flex justify-between gap-3 rounded-lg border border-border p-3 text-sm"><span>{row.employee_name}</span><span className="font-semibold tabular-nums">{money(Number(row.net_pay))}</span></div>)}</div>} />
       </KpiGrid>
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex-1">
@@ -216,7 +215,7 @@ function HrPage() {
                 <th>{ar ? "تاريخ التعيين" : "Hire date"}</th>
                 <th>{ar ? "الأساسي" : "Base"}</th>
                 <th>{ar ? "النسبي" : "Prorated"}</th>
-                <th>{ar ? "أيام / ساعات" : "Days / hours"}</th>
+                <th>{ar ? "أيام الحضور" : "Days present"}</th>
                 <th>{ar ? "غياب" : "Absence"}</th>
                 <th>{ar ? "جزاءات" : "Penalties"}</th>
                 <th>{ar ? "سلف" : "Advances"}</th>
@@ -247,9 +246,7 @@ function HrPage() {
                   <td>{r.hire_date ?? "—"}</td>
                   <td>{money(r.base_salary)}</td>
                   <td>{money(r.prorated_salary)}</td>
-                  <td>
-                    {r.worked_days} / {Number(r.worked_hours).toFixed(1)}
-                  </td>
+                  <td>{r.worked_days}</td>
                   <td className="text-destructive">
                     {r.absent_days > 0 ? `${r.absent_days} · ${money(r.absence_deduction)}` : "—"}
                   </td>
