@@ -32,8 +32,8 @@ export const downloadSnapshot = createServerFn({ method: "POST" })
   });
 
 /**
- * Permanently deletes one backup: the Google Drive file (when we still know its
- * id) plus its `backup_history` row. Super admins only.
+ * Permanently deletes one backup: its stored file (Storage, or Google Drive for
+ * older backups) plus its `backup_history` row. Super admins only.
  */
 export const deleteBackup = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -51,10 +51,18 @@ export const deleteBackup = createServerFn({ method: "POST" })
     if (rowError) throw new Error(rowError.message);
     if (!row) throw new Error("backup not found");
 
-    // Drive removal is best-effort: a missing or unreachable file must never
+    // File removal is best-effort: a missing or unreachable file must never
     // block clearing the history row.
     let driveDeleted = false;
-    if (row.drive_file_id) {
+    const { STORAGE_PREFIX, BACKUP_BUCKET } = await import("@/lib/backup.server");
+    if (row.drive_file_id?.startsWith(STORAGE_PREFIX)) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { error: removeError } = await supabaseAdmin.storage
+        .from(BACKUP_BUCKET)
+        .remove([row.drive_file_id.slice(STORAGE_PREFIX.length)]);
+      driveDeleted = !removeError;
+      if (removeError) console.warn("Storage delete failed, continuing:", removeError.message);
+    } else if (row.drive_file_id) {
       const lovableKey = process.env["LOVABLE_API_KEY"];
       const connectionKey = process.env["GOOGLE_DRIVE_API_KEY"];
       if (lovableKey && connectionKey) {
@@ -87,7 +95,12 @@ export const deleteBackup = createServerFn({ method: "POST" })
     return { id: data.id, driveDeleted };
   });
 
-/** Downloads a stored snapshot's JSON from Google Drive so it can be restored. */
+/**
+ * Gives the browser a short-lived link to a stored snapshot so it can download
+ * and unzip it itself (the worker never parses the multi-MB JSON). Older
+ * Google Drive backups are still fetched through the Lovable gateway when its
+ * keys are present.
+ */
 export const fetchBackupPayload = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { id: string }) => input)
@@ -103,6 +116,16 @@ export const fetchBackupPayload = createServerFn({ method: "POST" })
       .maybeSingle();
     if (rowError) throw new Error(rowError.message);
     if (!row?.drive_file_id) throw new Error("this backup has no stored file");
+
+    const { STORAGE_PREFIX, BACKUP_BUCKET } = await import("@/lib/backup.server");
+    if (row.drive_file_id.startsWith(STORAGE_PREFIX)) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: signed, error: signError } = await supabaseAdmin.storage
+        .from(BACKUP_BUCKET)
+        .createSignedUrl(row.drive_file_id.slice(STORAGE_PREFIX.length), 300);
+      if (signError || !signed) throw new Error(signError?.message ?? "could not open the backup file");
+      return { file_name: row.file_name, url: signed.signedUrl, payload: null };
+    }
 
     const lovableKey = process.env["LOVABLE_API_KEY"];
     const connectionKey = process.env["GOOGLE_DRIVE_API_KEY"];
@@ -121,5 +144,5 @@ export const fetchBackupPayload = createServerFn({ method: "POST" })
       throw new Error(`Drive download failed [${response.status}]`);
     }
     const payload = (await response.json()) as Record<string, Json>;
-    return { file_name: row.file_name, payload };
+    return { file_name: row.file_name, url: null, payload };
   });
