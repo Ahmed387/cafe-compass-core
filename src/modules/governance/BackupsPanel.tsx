@@ -105,13 +105,9 @@ export function BackupsPanel() {
       queryClient.invalidateQueries({ queryKey: ["backup-history"] });
       if (result.status === "success") {
         toast.success(
-          result.uploaded
-            ? ar
-              ? `تم رفع ${result.file_name} إلى مجلد 20s على جوجل درايف.`
-              : `Uploaded ${result.file_name} to the 20s folder on Google Drive.`
-            : ar
-              ? "تم إنشاء النسخة لكن جوجل درايف غير متصل."
-              : "Backup created but Google Drive is not connected.",
+          ar
+            ? `تم حفظ ${result.file_name} في مخزن النسخ الاحتياطية.`
+            : `Saved ${result.file_name} to backup storage.`,
         );
       } else {
         toast.error(result.error_message ?? (ar ? "فشل إنشاء النسخة." : "Backup failed."));
@@ -163,11 +159,20 @@ export function BackupsPanel() {
   });
 
   const pullFromDrive = useMutation({
-    mutationFn: async (row: BackupRow) => getPayload({ data: { id: row.id } }),
+    mutationFn: async (row: BackupRow) => {
+      const result = await getPayload({ data: { id: row.id } });
+      if (!result.url) return { file_name: result.file_name, payload: result.payload! };
+      const response = await fetch(result.url);
+      if (!response.ok || !response.body) throw new Error(`Download failed [${response.status}]`);
+      const text = await new Response(
+        response.body.pipeThrough(new DecompressionStream("gzip")),
+      ).text();
+      return { file_name: result.file_name, payload: JSON.parse(text) as Record<string, Json> };
+    },
     onSuccess: (result) => {
       setRestorePayload(result.payload);
       setRestoreName(result.file_name ?? "");
-      toast.success(ar ? "تم تحميل النسخة من درايف." : "Snapshot loaded from Drive.");
+      toast.success(ar ? "تم تحميل النسخة." : "Snapshot loaded.");
     },
     onError: (error) =>
       toast.error(error instanceof Error ? error.message : friendlyError(error, lang)),
@@ -239,7 +244,15 @@ export function BackupsPanel() {
             <span className="text-xs text-muted-foreground">{sizeLabel(last.file_size_bytes)}</span>
           ) : null}
           {last?.drive_file_id && (
-            <Badge variant="outline">{ar ? "على جوجل درايف" : "On Google Drive"}</Badge>
+            <Badge variant="outline">
+              {last.drive_file_id.startsWith("storage:")
+                ? ar
+                  ? "محفوظة في Supabase"
+                  : "In Supabase Storage"
+                : ar
+                  ? "على جوجل درايف"
+                  : "On Google Drive"}
+            </Badge>
           )}
           {last?.drive_link && (
             <a
