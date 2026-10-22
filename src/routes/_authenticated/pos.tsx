@@ -187,7 +187,7 @@ function PosPage() {
 
   const [categoryId, setCategoryId] = useState<string>("all");
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [orderType, setOrderType] = useState<"dine_in" | "takeaway" | "delivery">("takeaway");
+  const [orderType, setOrderType] = useState<"dine_in" | "takeaway" | "delivery">("dine_in");
   const [discount, setDiscount] = useState("");
   const [discountReason, setDiscountReason] = useState("");
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
@@ -749,6 +749,7 @@ function PosPage() {
     setCashReceived("");
     setPartnerId("");
     setPartnerMode("paid");
+    setOrderType("dine_in");
   }
 
   function addLine(line: Omit<CartLine, "key" | "quantity">) {
