@@ -14,6 +14,7 @@ type Dict = Record<string, { en: string; ar: string }>;
 
 export const dict: Dict = {
   "nav.offers": { en: "Offers & pricing", ar: "العروض والأسعار" },
+  "nav.addons": { en: "Add-ons", ar: "الإضافات" },
   "off.title": { en: "Offers & pricing", ar: "العروض والأسعار" },
   "off.subtitle": {
     en: "Pick products, get a price that keeps you profitable, and reward loyal customers.",

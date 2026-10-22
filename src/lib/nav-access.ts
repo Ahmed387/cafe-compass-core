@@ -32,6 +32,7 @@ export const NAV_PERMISSIONS: Record<string, string[] | ["*"]> = {
     "/purchases",
     "/returns",
     "/offers",
+    "/addons",
     "/qr",
     "/loyalty",
     "/expenses",
