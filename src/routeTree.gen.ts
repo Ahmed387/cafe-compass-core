@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as MenuRouteImport } from './routes/menu'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SoftMenuRouteImport } from './routes/soft-menu'
+import { Route as AuthenticatedAddonsRouteImport } from './routes/_authenticated/addons'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as AuthenticatedAuditRouteImport } from './routes/_authenticated/audit'
 import { Route as AuthenticatedBarRouteImport } from './routes/_authenticated/bar'
@@ -86,6 +87,11 @@ const SoftMenuRoute = SoftMenuRouteImport.update({
   id: '/soft-menu',
   path: '/soft-menu',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAddonsRoute = AuthenticatedAddonsRouteImport.update({
+  id: '/addons',
+  path: '/addons',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAnalyticsRoute = AuthenticatedAnalyticsRouteImport.update({
   id: '/analytics',
@@ -308,6 +314,7 @@ export interface FileRoutesByFullPath {
   '/menu': typeof MenuRoute
   '/reset-password': typeof ResetPasswordRoute
   '/soft-menu': typeof SoftMenuRoute
+  '/addons': typeof AuthenticatedAddonsRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/bar': typeof AuthenticatedBarRoute
@@ -357,6 +364,7 @@ export interface FileRoutesByTo {
   '/menu': typeof MenuRoute
   '/reset-password': typeof ResetPasswordRoute
   '/soft-menu': typeof SoftMenuRoute
+  '/addons': typeof AuthenticatedAddonsRoute
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/audit': typeof AuthenticatedAuditRoute
   '/bar': typeof AuthenticatedBarRoute
@@ -408,6 +416,7 @@ export interface FileRoutesById {
   '/menu': typeof MenuRoute
   '/reset-password': typeof ResetPasswordRoute
   '/soft-menu': typeof SoftMenuRoute
+  '/_authenticated/addons': typeof AuthenticatedAddonsRoute
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/audit': typeof AuthenticatedAuditRoute
   '/_authenticated/bar': typeof AuthenticatedBarRoute
@@ -459,6 +468,7 @@ export interface FileRouteTypes {
     | '/menu'
     | '/reset-password'
     | '/soft-menu'
+    | '/addons'
     | '/analytics'
     | '/audit'
     | '/bar'
@@ -508,6 +518,7 @@ export interface FileRouteTypes {
     | '/menu'
     | '/reset-password'
     | '/soft-menu'
+    | '/addons'
     | '/analytics'
     | '/audit'
     | '/bar'
@@ -558,6 +569,7 @@ export interface FileRouteTypes {
     | '/menu'
     | '/reset-password'
     | '/soft-menu'
+    | '/_authenticated/addons'
     | '/_authenticated/analytics'
     | '/_authenticated/audit'
     | '/_authenticated/bar'
@@ -657,6 +669,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/soft-menu'
       preLoaderRoute: typeof SoftMenuRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/addons': {
+      id: '/_authenticated/addons'
+      path: '/addons'
+      fullPath: '/addons'
+      preLoaderRoute: typeof AuthenticatedAddonsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/analytics': {
       id: '/_authenticated/analytics'
@@ -956,6 +975,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAddonsRoute: typeof AuthenticatedAddonsRoute
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedAuditRoute: typeof AuthenticatedAuditRoute
   AuthenticatedBarRoute: typeof AuthenticatedBarRoute
@@ -998,6 +1018,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAddonsRoute: AuthenticatedAddonsRoute,
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedAuditRoute: AuthenticatedAuditRoute,
   AuthenticatedBarRoute: AuthenticatedBarRoute,

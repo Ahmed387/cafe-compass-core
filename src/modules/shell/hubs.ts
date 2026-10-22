@@ -13,6 +13,7 @@ import {
   Boxes,
   Coffee,
   Handshake,
+  ListPlus,
   Landmark,
   LineChart,
   LayoutDashboard,
@@ -116,6 +117,7 @@ export const HUBS: Hub[] = [
     icon: Coffee,
     tabs: [
       { to: "/menu-studio", labelKey: "nav.menu", icon: Coffee, permission: "products.view" },
+      { to: "/addons", labelKey: "nav.addons", icon: ListPlus, permission: "products.view" },
       { to: "/offers", labelKey: "nav.offers", icon: BadgePercent, permission: "products.view" },
       { to: "/loyalty", labelKey: "nav.loyalty", icon: Coins, permission: "loyalty.view" },
       { to: "/qr", labelKey: "nav.qr", icon: QrCode, permission: "products.view" },
