@@ -2010,6 +2010,7 @@ export type Database = {
       }
       order_refunds: {
         Row: {
+          business_date: string
           amount: number
           blamed_staff_id: string | null
           branch_id: string
@@ -2034,6 +2035,7 @@ export type Database = {
           wallet_amount: number
         }
         Insert: {
+          business_date?: string
           amount: number
           blamed_staff_id?: string | null
           branch_id: string
@@ -2058,6 +2060,7 @@ export type Database = {
           wallet_amount?: number
         }
         Update: {
+          business_date?: string
           amount?: number
           blamed_staff_id?: string | null
           branch_id?: string
@@ -2135,6 +2138,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          business_date: string
           branch_id: string
           cancel_reason: string | null
           cancelled_at: string | null
@@ -2161,6 +2165,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          business_date?: string
           branch_id: string
           cancel_reason?: string | null
           cancelled_at?: string | null
@@ -2187,6 +2192,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          business_date?: string
           branch_id?: string
           cancel_reason?: string | null
           cancelled_at?: string | null
@@ -4555,6 +4561,7 @@ export type Database = {
       }
       shifts: {
         Row: {
+          business_date: string
           branch_id: string
           cash_drop: number | null
           closed_at: string | null
@@ -4577,6 +4584,7 @@ export type Database = {
           variance: number | null
         }
         Insert: {
+          business_date?: string
           branch_id: string
           cash_drop?: number | null
           closed_at?: string | null
@@ -4599,6 +4607,7 @@ export type Database = {
           variance?: number | null
         }
         Update: {
+          business_date?: string
           branch_id?: string
           cash_drop?: number | null
           closed_at?: string | null
@@ -5012,6 +5021,7 @@ export type Database = {
       }
       stock_movements: {
         Row: {
+          business_date: string
           balance_after: number
           branch_id: string
           company_id: string
@@ -5030,6 +5040,7 @@ export type Database = {
           waste_staff_id: string | null
         }
         Insert: {
+          business_date?: string
           balance_after?: number
           branch_id: string
           company_id: string
@@ -5048,6 +5059,7 @@ export type Database = {
           waste_staff_id?: string | null
         }
         Update: {
+          business_date?: string
           balance_after?: number
           branch_id?: string
           company_id?: string
@@ -6492,6 +6504,17 @@ export type Database = {
           _source?: string
         }
         Returns: string
+      }
+      pending_shift_shortages: {
+        Args: never
+        Returns: {
+          business_date: string
+          cashier: string
+          closed_at: string
+          opened_at: string
+          shift_id: string
+          shortage: number
+        }[]
       }
       pay_salary: {
         Args: { _account_id?: string; _method?: string; _salary_id: string }

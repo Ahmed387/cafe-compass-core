@@ -1,6 +1,6 @@
 import { businessDay } from "@/core/finance/business-dates";
 
-/** Today in the cafe's business day (Africa/Cairo, starting 06:00), as YYYY-MM-DD. */
+/** Today in the cafe's business day (Africa/Cairo calendar day), as YYYY-MM-DD. */
 export function cafeToday(now = new Date(), timeZone = "Africa/Cairo"): string {
   return businessDay(now, timeZone);
 }

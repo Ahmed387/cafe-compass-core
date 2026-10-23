@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useI18n } from "@/lib/i18n";
-import { businessDayStartIso, monthToDate } from "@/core/finance/business-dates";
+import { monthToDate } from "@/core/finance/business-dates";
 import { ShiftLedgerKpis } from "@/modules/operations/ShiftLedgerKpis";
 
 /** The core shift KPIs for this business month, from the shared engine. */
@@ -21,7 +21,7 @@ export function FinanceKpiStrip() {
         .from("shifts")
         .select("id")
         .eq("branch_id", currentBranchId!)
-        .gte("opened_at", businessDayStartIso(start))
+        .gte("business_date", start)
         .limit(500);
       if (error) throw error;
       return { start, ids: (data ?? []).map((s) => s.id) };

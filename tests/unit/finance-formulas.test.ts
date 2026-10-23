@@ -7,6 +7,7 @@ import {
   businessDayStartIso,
   daysBetween,
   monthBounds,
+  shiftBusinessDay,
 } from "../../src/core/finance/business-dates.ts";
 import { netInvoiceTotal, normalizeTender, saleRefundTotal, sum } from "../../src/core/finance/formulas.ts";
 
@@ -39,19 +40,27 @@ test("money sums round to piasters and ignore junk", () => {
   assert.equal(sum([10, Number.NaN, 5]), 15);
 });
 
-test("business day follows Cairo time and starts at 6 AM", () => {
-  // 03:30 UTC on Oct 22 is 06:30 in Cairo (UTC+3 in summer time): a new day.
-  assert.equal(businessDay(new Date("2026-10-22T03:30:00Z")), "2026-10-22");
-  // 23:30 UTC on Oct 21 is 02:30 on Oct 22 in Cairo: still the night of Oct 21.
-  assert.equal(businessDay(new Date("2026-10-21T23:30:00Z")), "2026-10-21");
-  // 05:59 Cairo still belongs to the day before.
-  assert.equal(businessDay(new Date("2026-10-22T02:59:00Z")), "2026-10-21");
-  assert.equal(businessDay(new Date("2026-10-21T20:00:00Z")), "2026-10-21");
+test("calendar day follows Cairo time, not UTC", () => {
+  // 21:30 UTC on Oct 21 is 00:30 on Oct 22 in Cairo (UTC+3 in summer time).
+  assert.equal(businessDay(new Date("2026-10-21T21:30:00Z")), "2026-10-22");
+  // 20:59 UTC is still 23:59 on Oct 21 in Cairo.
+  assert.equal(businessDay(new Date("2026-10-21T20:59:00Z")), "2026-10-21");
 });
 
-test("business day starts at 06:00 Cairo (03:00 UTC in summer time, 04:00 in winter)", () => {
-  assert.equal(businessDayStartIso("2026-10-22"), "2026-10-22T03:00:00.000Z");
-  assert.equal(businessDayStartIso("2026-12-01"), "2026-12-01T04:00:00.000Z");
+test("a Cairo day starts at midnight (21:00 UTC in summer time, 22:00 in winter)", () => {
+  assert.equal(businessDayStartIso("2026-10-22"), "2026-10-21T21:00:00.000Z");
+  assert.equal(businessDayStartIso("2026-12-01"), "2026-11-30T22:00:00.000Z");
+});
+
+test("a shift belongs to the day it opened, however late it closes", () => {
+  // Opened 22/10 at 18:00 Cairo.
+  assert.equal(shiftBusinessDay("2026-10-22T15:00:00Z"), "2026-10-22");
+  // Opened 23/10 at 00:30 Cairo (just after midnight): that is the 23rd.
+  assert.equal(shiftBusinessDay("2026-10-22T21:30:00Z"), "2026-10-23");
+  // Winter time change (29/10): opened 28/10 at 18:00 Cairo (UTC+3) is the 28th.
+  assert.equal(shiftBusinessDay(new Date("2026-10-28T15:00:00Z")), "2026-10-28");
+  // After the change Cairo is UTC+2: 22:30 UTC on 29/10 is 00:30 on 30/10.
+  assert.equal(shiftBusinessDay("2026-10-29T22:30:00Z"), "2026-10-30");
 });
 
 test("date helpers", () => {

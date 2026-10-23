@@ -21,11 +21,11 @@ test("pay date: today and past days only, real calendar days", () => {
   assert.equal(validPayDate("", "2026-10-21"), false);
 });
 
-test("cafe day follows Cairo and starts at 6 AM, not UTC midnight", () => {
+test("cafe day follows the Cairo calendar, not UTC", () => {
   // 04:00 UTC on the 21st is 07:00 in Cairo (UTC+3): the 21st.
   assert.equal(cafeToday(new Date("2026-10-21T04:00:00Z")), "2026-10-21");
-  // 23:30 UTC on the 20th is 02:30 on the 21st in Cairo: still the 20th's night.
-  assert.equal(cafeToday(new Date("2026-10-20T23:30:00Z")), "2026-10-20");
+  // 21:30 UTC on the 20th is 00:30 on the 21st in Cairo.
+  assert.equal(cafeToday(new Date("2026-10-20T21:30:00Z")), "2026-10-21");
   assert.equal(cafeToday(new Date("2026-10-20T20:00:00Z")), "2026-10-20");
 });
 

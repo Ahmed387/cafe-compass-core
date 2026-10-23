@@ -172,8 +172,8 @@ export function PayoutWizard({
             </div>
             <p className="rounded-xl bg-muted p-3 text-xs leading-6 text-muted-foreground">
               {ar
-                ? "اختار أي فترة، حتى لو شهر واحد. اليوم بيبدأ الساعة 6 الصبح بتوقيت القاهرة. اقترحنا عليك تبدأ من اليوم اللي بعد آخر توزيع عشان مفيش يوم يتوزع مرتين."
-                : "Pick any period, even a single month. Each day starts at 6 AM Cairo time. We suggest starting right after the last payout so no day is paid twice."}
+                ? "اختار أي فترة، حتى لو شهر واحد. كل وردية بتتحسب على يوم فتحها. اقترحنا عليك تبدأ من اليوم اللي بعد آخر توزيع عشان مفيش يوم يتوزع مرتين."
+                : "Pick any period, even a single month. Each shift counts on the day it opened. We suggest starting right after the last payout so no day is paid twice."}
             </p>
             {p && <PeriodSummary pnl={p.pnl} money={money} lang={lang} />}
             {p && (

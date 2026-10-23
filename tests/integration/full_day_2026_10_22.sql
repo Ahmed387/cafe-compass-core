@@ -244,18 +244,19 @@ BEGIN
       'زيادة المصاريف=' || _txt || ' تاريخ المصروف=' || (SELECT expense_date::text FROM public.expenses WHERE shift_id = _shift AND amount = 40 LIMIT 1) || ' النهارده=' || _today);
   EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.ok('21 الأرباح والخسائر', false, SQLERRM); END;
 
-  -- 22. Closing short without saying who carries it is refused; exact close works.
+  -- 22. Closing 10 short without saying who carries it: the shift closes and the
+  -- shortage waits for the super admin, who gets a warning.
   BEGIN
     _fig := public._shift_drawer((SELECT s FROM public.shifts s WHERE s.id = _shift));
-    BEGIN
-      PERFORM public.close_shift_handover(_shift, (_fig->>'expected')::numeric - 10, 0, NULL, NULL, 'اختبار عجز');
-      PERFORM pg_temp.ok('22 قفل وردية فيها عجز من غير ما تحدد مين يتحمله', false, 'اتقفلت!');
-    EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.ok('22 قفل وردية فيها عجز من غير ما تحدد مين يتحمله', true, SQLERRM); END;
-    _j := public.close_shift_handover(_shift, (_fig->>'expected')::numeric, 0, NULL, NULL, 'اختبار قفل');
-    PERFORM pg_temp.ok('23 قفل الوردية بالمبلغ المظبوط',
-      (SELECT status = 'closed' AND COALESCE(variance, 0) = 0 FROM public.shifts WHERE id = _shift),
+    _j := public.close_shift_handover(_shift, (_fig->>'expected')::numeric - 10, 0, NULL, NULL, 'اختبار عجز');
+    PERFORM pg_temp.ok('22 قفل بعجز من غير تحديد: اتقفلت والعجز مستني السوبر أدمن',
+      (SELECT status = 'closed' AND variance = -10 AND shortage_resolution = 'pending' FROM public.shifts WHERE id = _shift)
+        AND EXISTS (SELECT 1 FROM public.notifications WHERE type = 'shift.shortage' AND data->>'shift_id' = _shift::text),
       'المتوقع في الدرج=' || (_fig->>'expected'));
-  EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.ok('23 قفل الوردية', false, SQLERRM); END;
+    PERFORM public.reassign_shift_shortage(_shift, 'venue', NULL, 'فرق في عد الفكة آخر الليل');
+    PERFORM pg_temp.ok('23 السوبر أدمن حمل العجز على المكان بسبب مكتوب',
+      (SELECT shortage_resolution FROM public.shifts WHERE id = _shift) = 'venue');
+  EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.ok('22 قفل الوردية بعجز', false, SQLERRM); END;
 
   -- 24. After the shift closes, its bills can't be refunded.
   BEGIN

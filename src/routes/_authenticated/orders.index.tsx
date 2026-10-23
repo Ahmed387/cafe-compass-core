@@ -1,4 +1,4 @@
-import { addDays, businessDayStartIso, businessToday } from "@/core/finance/business-dates";
+import { addDays, businessToday } from "@/core/finance/business-dates";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -11,6 +11,7 @@ import { CustomerProfileDialog } from "@/components/customers/CustomerProfileDia
 import { OrderDetailsDialog, type OrderDetails } from "@/components/orders/OrderDetailsDialog";
 import { OrderCancelDialog } from "@/components/orders/OrderCancelDialog";
 import { Pagination } from "@/components/shared";
+import { PendingShortagesAlert } from "@/modules/operations/PendingShortagesAlert";
 import { ShortageBearerCell } from "@/modules/operations/ShortageBearerCell";
 import { ShiftRefundBearersButton } from "@/modules/operations/ShiftRefundBearersButton";
 import { KpiCard, KpiDetailRows, KpiGrid } from "@/components/shared/KpiCard";
@@ -82,10 +83,6 @@ const PAGE_SIZE = 25;
 
 function isoDay(offsetDays: number) {
   return addDays(businessToday(), offsetDays);
-}
-
-function nextDayIso(day: string) {
-  return businessDayStartIso(addDays(day, 1));
 }
 
 function searchDay(value: string) {
@@ -166,22 +163,24 @@ function OrdersPage() {
         { count: "exact" },
       )
       .eq("branch_id", branchId)
-      .gte("created_at", businessDayStartIso(from))
-      .lt("created_at", nextDayIso(to))
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
+    // A cashier sees the whole open shift, whatever day it started; everyone
+    // else filters by the shift's business day.
     if (cashierOnly) {
       if (!myShiftId) return { rows: [], total: 0 };
       query = query.eq("shift_id", myShiftId);
+    } else {
+      query = query.gte("business_date", from).lte("business_date", to);
     }
     if (orderType !== "all") query = query.eq("order_type", orderType as "dine_in");
     if (payMethod !== "all") {
       const { data: paid, error: payError } = await supabase
         .from("order_payments")
-        .select("order_id")
+        .select("order_id, orders!inner(business_date)")
         .eq("method_key", payMethod)
-        .gte("created_at", businessDayStartIso(from))
-        .lt("created_at", nextDayIso(to))
+        .gte("orders.business_date", from)
+        .lte("orders.business_date", to)
         .limit(5000);
       if (payError) throw payError;
       const ids = [...new Set((paid ?? []).map((p) => p.order_id))];
@@ -203,7 +202,7 @@ function OrdersPage() {
     if (s) {
       const day = searchDay(s);
       if (day) {
-        query = query.gte("created_at", businessDayStartIso(day)).lt("created_at", nextDayIso(day));
+        query = query.eq("business_date", day);
       } else {
         const safe = s.replace(/[%,()]/g, "").trim();
         if (safe) {
@@ -413,6 +412,8 @@ function OrdersPage() {
 
   const canExportShifts =
     me?.roleNames.some((role) => ["Super Admin", "Manager", "Partner"].includes(role)) ?? false;
+  // Only the super admin decides who carries a drawer shortage.
+  const canDecideShortage = me?.roleNames.includes("Super Admin") ?? false;
 
   const exportShift = async (shift: NonNullable<typeof shifts.data>[number]) => {
     if (shift.status !== "closed" || !canExportShifts || exportingShiftId) return;
@@ -1004,6 +1005,7 @@ function OrdersPage() {
 
         {can("shifts.view") && (
           <TabsContent value="shifts" className="mt-4 space-y-4">
+            {canDecideShortage && <PendingShortagesAlert lang={lang} currency={currency} />}
             {!cashierOnly && <>
             <ShiftFilterBar value={shiftFilter} onChange={setShiftFilter} lang={lang} />
             <ShiftLedgerKpis
@@ -1114,7 +1116,7 @@ function OrdersPage() {
                               shiftId={row.id}
                               shortage={row.status === "closed" && variance !== null && variance < 0 ? -variance : 0}
                               mode={row.shortage_resolution}
-                              editable={canExportShifts}
+                              editable={canDecideShortage}
                               lang={lang}
                             />
                             {row.status === "closed" && (can("shifts.adjust_cash") || Boolean(me?.isRoot || me?.roleNames.includes("Super Admin"))) && (
