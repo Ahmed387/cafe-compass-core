@@ -912,6 +912,42 @@ export type Database = {
           },
         ]
       }
+      cost_recalcs: {
+        Row: {
+          company_id: string
+          cogs_delta: number
+          created_by: string | null
+          error: string | null
+          first_date: string | null
+          id: string
+          lines_changed: number
+          ran_at: string
+          reason: string
+        }
+        Insert: {
+          company_id: string
+          cogs_delta?: number
+          created_by?: string | null
+          error?: string | null
+          first_date?: string | null
+          id?: string
+          lines_changed?: number
+          ran_at?: string
+          reason: string
+        }
+        Update: {
+          company_id?: string
+          cogs_delta?: number
+          created_by?: string | null
+          error?: string | null
+          first_date?: string | null
+          id?: string
+          lines_changed?: number
+          ran_at?: string
+          reason?: string
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           barcode: string
@@ -1420,6 +1456,7 @@ export type Database = {
           min_qty: number
           name: string
           name_ar: string | null
+          opening_cost: number | null
           sku: string | null
           unit: string
           updated_at: string
@@ -1436,6 +1473,7 @@ export type Database = {
           min_qty?: number
           name: string
           name_ar?: string | null
+          opening_cost?: number | null
           sku?: string | null
           unit?: string
           updated_at?: string
@@ -1452,6 +1490,7 @@ export type Database = {
           min_qty?: number
           name?: string
           name_ar?: string | null
+          opening_cost?: number | null
           sku?: string | null
           unit?: string
           updated_at?: string
@@ -5034,6 +5073,7 @@ export type Database = {
           balance_after: number
           branch_id: string
           company_id: string
+          cost_event: boolean
           created_at: string
           created_by: string | null
           id: string
@@ -5053,6 +5093,7 @@ export type Database = {
           balance_after?: number
           branch_id: string
           company_id: string
+          cost_event?: boolean
           created_at?: string
           created_by?: string | null
           id?: string
@@ -5072,6 +5113,7 @@ export type Database = {
           balance_after?: number
           branch_id?: string
           company_id?: string
+          cost_event?: boolean
           created_at?: string
           created_by?: string | null
           id?: string
@@ -6628,6 +6670,7 @@ export type Database = {
         }
         Returns: Json
       }
+      recost_sales_now: { Args: never; Returns: Json }
       recalc_order_totals: { Args: { _order_id: string }; Returns: undefined }
       receive_purchase: { Args: { _purchase_id: string }; Returns: string }
       recompute_capital_equity: {

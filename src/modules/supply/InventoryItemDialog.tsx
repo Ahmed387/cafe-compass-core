@@ -297,8 +297,8 @@ export function InventoryItemDialog({
             title={ar ? "التكلفة والمخزون" : "Cost & stock"}
             hint={
               ar
-                ? "تكلفة الشراء الصافية لكل وحدة، من غير أي هالك."
-                : "The plain purchase cost per unit — no waste added."
+                ? "تكلفة الشراء الصافية لكل وحدة، من غير أي هالك. دي تكلفة أول المدة لحد أول فاتورة شراء، وبعدها السيستم بيحسب المتوسط لوحده ويعدّل تكلفة المبيعات اللي أرباحها لسه ما اتوزعتش."
+                : "The plain purchase cost per unit — no waste added. It is the opening cost until the first purchase invoice; after that the average updates by itself and re-costs sales not yet paid out."
             }
           >
             {isNew && (
