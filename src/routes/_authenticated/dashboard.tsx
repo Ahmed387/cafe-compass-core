@@ -10,12 +10,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { auditLabels } from "@/lib/audit-labels";
 import { formatDateTime, formatMoney } from "@/lib/format";
-import { addDays, businessDayStartIso, businessToday, monthToDate } from "@/core/finance/business-dates";
+import { addDays, businessToday, monthToDate } from "@/core/finance/business-dates";
 import { useFinancialEngine } from "@/core/hooks/useFinancialEngine";
 import { useI18n } from "@/lib/i18n";
 import { OwnerStatementPanel } from "@/modules/governance/OwnerStatementPanel";
 import { LivePositionPanel } from "@/modules/finance/LivePositionPanel";
 import { BarLowStockAlert, useBarLowStock } from "@/modules/supply/bar-low-stock";
+import { PendingShortagesAlert } from "@/modules/operations/PendingShortagesAlert";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -102,7 +103,7 @@ function DashboardPage() {
       const today = businessToday();
       const first = addDays(today, -6);
       const [shifts, week] = await Promise.all([
-        supabase.from("shifts").select("id, status, opened_at").eq("branch_id", currentBranchId!).gte("opened_at", businessDayStartIso(mtd.start)).limit(500),
+        supabase.from("shifts").select("id, status, opened_at").eq("branch_id", currentBranchId!).gte("business_date", mtd.start).limit(500),
         supabase.rpc("sales_period_summary", { _from: first, _to: today, _branch_id: currentBranchId! }),
       ]);
       const byDay = new Map(
@@ -150,6 +151,8 @@ function DashboardPage() {
           </Badge>
         }
       />
+
+      {me?.roleNames.includes("Super Admin") && <PendingShortagesAlert lang={lang} currency={currency} />}
 
       {can("inventory.view") && <BarLowStockAlert items={barLow.items} showLink />}
 

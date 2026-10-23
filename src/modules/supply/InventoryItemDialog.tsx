@@ -1,6 +1,6 @@
-import { useMutation } from "@tanstack/react-query";
-import { Coins, Info, Package, Trash2, type LucideIcon } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Coins, Info, Package, ShoppingBag, Trash2, type LucideIcon } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,9 @@ export function deriveUnitCost(totalCost: string, quantity: string): string | nu
   if (!Number.isFinite(qty) || qty <= 0) return "0.00";
   return (Math.round((total / qty) * 1000) / 1000).toFixed(3);
 }
+
+const sameName = (a: string | null | undefined, b: string | null | undefined) =>
+  Boolean(a?.trim() && b?.trim() && a.trim().toLowerCase() === b.trim().toLowerCase());
 
 function Section({
   icon: Icon,
@@ -150,10 +153,30 @@ export function InventoryItemDialog({
   const ar = lang === "ar";
   const { me, currentBranchId } = useAuth();
   const currency = me?.company?.currency ?? "EGP";
+  const qc = useQueryClient();
   const [form, setForm] = useState<InventoryItemForm>(initial);
+  // Menu product this item is sold as (1 piece sold = 1 unit of this item).
+  const [sellAs, setSellAs] = useState<string | null>(null);
   useEffect(() => {
-    if (open) setForm(initial);
+    if (open) {
+      setForm(initial);
+      setSellAs(null);
+    }
   }, [open, initial]);
+
+  const menu = useQuery({
+    queryKey: ["ready-product-links"],
+    enabled: open,
+    queryFn: async () => {
+      const [products, recipes] = await Promise.all([
+        supabase.from("products").select("id, name, name_ar").eq("is_active", true).order("name"),
+        supabase.from("product_recipes").select("product_id, item_id, quantity"),
+      ]);
+      if (products.error) throw products.error;
+      if (recipes.error) throw recipes.error;
+      return { products: products.data ?? [], recipes: recipes.data ?? [] };
+    },
+  });
 
   const isNew = !form.id;
   const set = (patch: Partial<InventoryItemForm>) => setForm((prev) => ({ ...prev, ...patch }));
@@ -162,6 +185,35 @@ export function InventoryItemDialog({
   const wasteValid =
     form.waste_pct.trim() === "" || (Number.isFinite(waste) && waste >= 0 && waste <= 100);
   const unitCost = Number(form.cost_per_unit || 0);
+
+  const { freeProducts, linkedProducts, suggested } = useMemo(() => {
+    const products = menu.data?.products ?? [];
+    const recipes = menu.data?.recipes ?? [];
+    const withRecipe = new Set(recipes.map((r) => r.product_id));
+    const free = products.filter((p) => !withRecipe.has(p.id));
+    const linked = form.id
+      ? products.filter((p) => {
+          const [only, ...more] = recipes.filter((r) => r.product_id === p.id);
+          return (
+            only !== undefined &&
+            more.length === 0 &&
+            only.item_id === form.id &&
+            Number(only.quantity) === 1
+          );
+        })
+      : [];
+    // A new item named like a menu product with no recipe is most likely that product, bought ready.
+    const match = !form.id
+      ? free.find((p) =>
+          [p.name, p.name_ar].some((n) => sameName(n, form.name) || sameName(n, form.name_ar)),
+        )
+      : undefined;
+    return { freeProducts: free, linkedProducts: linked, suggested: match };
+  }, [menu.data, form.id, form.name, form.name_ar]);
+  const sellAsId = sellAs ?? suggested?.id ?? "none";
+  const sellAsProduct = freeProducts.find((p) => p.id === sellAsId);
+  const productLabel = (p: { name: string; name_ar: string | null }) =>
+    ar ? p.name_ar || p.name : p.name;
 
   const save = useMutation({
     mutationFn: async () => {
@@ -208,8 +260,40 @@ export function InventoryItemDialog({
         });
         if (error) throw error;
       }
+      if (!id || !sellAsProduct) return null;
+      // The item is saved by now; a failed link is reported without failing the save.
+      try {
+        const { count, error: countError } = await supabase
+          .from("product_recipes")
+          .select("id", { count: "exact", head: true })
+          .eq("product_id", sellAsProduct.id);
+        if (countError) throw countError;
+        if (count) {
+          return ar
+            ? `"${productLabel(sellAsProduct)}" بقى له وصفة، فما اتربطش. راجعه من شاشة المنيو.`
+            : `"${productLabel(sellAsProduct)}" already has a recipe, so it was not linked.`;
+        }
+        const { error } = await supabase
+          .from("product_recipes")
+          .insert({ product_id: sellAsProduct.id, item_id: id, quantity: 1 });
+        if (error) throw error;
+      } catch (e) {
+        return ar
+          ? `الصنف اتحفظ، بس الربط بالمنتج ما تمش: ${friendlyError(e, lang)}`
+          : `Item saved, but linking it to the product failed: ${friendlyError(e, lang)}`;
+      }
+      toast.success(
+        ar
+          ? `اتربط بـ "${productLabel(sellAsProduct)}". كل واحد يتباع هيتخصم من المخزون وياخد تكلفته.`
+          : `Linked to "${productLabel(sellAsProduct)}". Each one sold takes one from stock at its cost.`,
+      );
+      return null;
     },
-    onSuccess: async () => {
+    onSuccess: async (linkProblem) => {
+      if (linkProblem) toast.error(linkProblem);
+      ["ready-product-links", "recipes", "product-recipe-links"].forEach((k) =>
+        qc.invalidateQueries({ queryKey: [k] }),
+      );
       toast.success(t("common.saved"));
       onOpenChange(false);
       await onSaved();
@@ -292,13 +376,69 @@ export function InventoryItemDialog({
             </div>
           </Section>
 
+          {(freeProducts.length > 0 || linkedProducts.length > 0) && (
+            <Section
+              icon={ShoppingBag}
+              title={ar ? "بيتباع جاهز في المنيو؟" : "Sold as-is on the menu?"}
+              hint={
+                ar
+                  ? 'لو بتشتري الصنف ده جاهز وبتبيعه زي ما هو (زي الكانز أو حلويات جاهزة)، اختار المنتج بتاعه. لو خامة بتدخل في وصفات، سيبها "لا".'
+                  : 'If you buy this ready and sell it as it is (cans, ready desserts), pick its menu product. Leave "No" for an ingredient used in recipes.'
+              }
+            >
+              {linkedProducts.length > 0 && (
+                <p className="rounded-lg bg-muted p-3 text-xs leading-relaxed">
+                  {ar ? "مربوط بالفعل بـ: " : "Already sold as: "}
+                  <span className="font-semibold">
+                    {linkedProducts.map(productLabel).join("، ")}
+                  </span>
+                </p>
+              )}
+              {freeProducts.length > 0 && (
+                <Field
+                  id="inv-sell-as"
+                  label={ar ? "منتج المنيو" : "Menu product"}
+                  hint={
+                    sellAsProduct
+                      ? ar
+                        ? `${sellAs === null ? "لقينا منتج بنفس الاسم فاخترناه، غيّره لو مش هو. " : ""}كل 1 ${form.unit} من الصنف ده = 1 "${productLabel(sellAsProduct)}". لما يتباع واحد يتخصم واحد من المخزون وياخد تكلفته، ولما تدخل فاتورة شراء التكلفة بتتعدل لوحدها، حتى على اللي اتباع قبل كده.${form.unit !== "pcs" ? " خلي الوحدة pcs (قطعة)." : ""}`
+                        : `${sellAs === null ? "We found a product with the same name; change it if it is not this one. " : ""}1 ${form.unit} of this item = 1 "${productLabel(sellAsProduct)}". Each sale takes one from stock at its cost, and purchase invoices re-cost earlier sales automatically.${form.unit !== "pcs" ? " Set the unit to pcs." : ""}`
+                      : undefined
+                  }
+                >
+                  <Select
+                    value={sellAsId}
+                    onValueChange={(v) => {
+                      setSellAs(v);
+                      if (v !== "none") set({ unit: "pcs" });
+                    }}
+                  >
+                    <SelectTrigger id="inv-sell-as">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">
+                        {ar ? "لا، دي خامة بتدخل في وصفات" : "No, it is an ingredient"}
+                      </SelectItem>
+                      {freeProducts.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {productLabel(p)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
+            </Section>
+          )}
+
           <Section
             icon={Coins}
             title={ar ? "التكلفة والمخزون" : "Cost & stock"}
             hint={
               ar
-                ? "تكلفة الشراء الصافية لكل وحدة، من غير أي هالك."
-                : "The plain purchase cost per unit — no waste added."
+                ? "تكلفة الشراء الصافية لكل وحدة، من غير أي هالك. دي تكلفة أول المدة لحد أول فاتورة شراء، وبعدها السيستم بيحسب المتوسط لوحده ويعدّل تكلفة المبيعات اللي أرباحها لسه ما اتوزعتش."
+                : "The plain purchase cost per unit — no waste added. It is the opening cost until the first purchase invoice; after that the average updates by itself and re-costs sales not yet paid out."
             }
           >
             {isNew && (

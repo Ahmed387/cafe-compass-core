@@ -43,7 +43,9 @@ import {
   type PartnerRow,
 } from "@/components/partners/PartnerStatementDialog";
 import { SuperAdminManagingCard } from "@/components/partners/SuperAdminManagingCard";
+import { ContributionDialog } from "@/components/partners/ContributionDialog";
 import { PartnerDashboard } from "@/components/partners/PartnerDashboard";
+import { businessToday } from "@/core/finance/business-dates";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { formatDate, formatMoney, formatPercent, friendlyError } from "@/lib/format";
@@ -95,12 +97,11 @@ function PartnersPage() {
   const currency = me?.company?.currency ?? "EGP";
   const [openPartner, setOpenPartner] = useState(false);
   const [partnerForm, setPartnerForm] = useState({ name: "", email: "", phone: "" });
-  const [capitalFor, setCapitalFor] = useState<string | null>(null);
+  const [capitalFor, setCapitalFor] = useState<{ id: string; name: string } | null>(null);
   const [editPartner, setEditPartner] = useState<{ id: string; name: string; share: string } | null>(null);
   const [statementFor, setStatementFor] = useState<PartnerRow | null>(null);
   const [liquidationFor, setLiquidationFor] = useState<LiquidationPartner | null>(null);
   const [deleteFor, setDeleteFor] = useState<{ id: string; name: string } | null>(null);
-  const [capitalForm, setCapitalForm] = useState({ amount: "", date: "", reference: "" });
 
   const { data } = useQuery({
     queryKey: ["partners"],
@@ -113,11 +114,11 @@ function PartnersPage() {
           .order("created_at"),
         supabase
           .from("partner_ownership")
-          .select("partner_id, total_contributions, ownership_percentage"),
+          .select("partner_id, total_contributions, ownership_percentage, open_loans"),
         supabase.from("partner_balances").select("partner_id, balance"),
         supabase
           .from("partner_capital_contributions")
-          .select("id, partner_id, amount, contribution_date, reference")
+          .select("id, partner_id, amount, contribution_date, reference, kind, effective_from, repaid_amount")
           .order("contribution_date", { ascending: false })
           .limit(50),
       ]);
@@ -144,27 +145,6 @@ function PartnersPage() {
       setPartnerForm({ name: "", email: "", phone: "" });
       queryClient.invalidateQueries({ queryKey: ["partners"] });
       toast.success(lang === "ar" ? "تم إضافة الشريك." : "Partner added.");
-    },
-    onError: (error) => toast.error(friendlyError(error, lang)),
-  });
-
-  const addCapital = useMutation({
-    mutationFn: async () => {
-      const amount = Number(capitalForm.amount);
-      if (!capitalFor || !Number.isFinite(amount) || amount <= 0) throw new Error("Invalid amount");
-      const { error } = await supabase.rpc("record_capital_contribution", {
-        _partner_id: capitalFor,
-        _amount: amount,
-        ...(capitalForm.reference ? { _reference: capitalForm.reference } : {}),
-        ...(capitalForm.date ? { _contribution_date: capitalForm.date } : {}),
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      setCapitalFor(null);
-      setCapitalForm({ amount: "", date: "", reference: "" });
-      queryClient.invalidateQueries({ queryKey: ["partners"] });
-      toast.success(lang === "ar" ? "تم تسجيل المساهمة." : "Contribution recorded.");
     },
     onError: (error) => toast.error(friendlyError(error, lang)),
   });
@@ -226,6 +206,12 @@ function PartnersPage() {
 
   const allPartners = (data?.partners ?? []) as Array<NonNullable<typeof data>["partners"][number] & { dividends_paused?: boolean }>;
   const activeCount = allPartners.filter((p) => p.status === "active").length;
+  // A capital contribution changes everyone's share from the 1st of the next month.
+  const today = businessToday();
+  const pendingShareDate = (data?.contributions ?? [])
+    .filter((c) => c.kind === "capital" && c.effective_from > today)
+    .map((c) => c.effective_from)
+    .sort()[0];
   const partners = allPartners.filter(
     (p) => (view === "active" ? p.status === "active" : p.status !== "active") && matches(q, p.name, p.email, p.phone),
   );
@@ -433,6 +419,14 @@ function PartnersPage() {
         ))}
       </div>
       <SmartFilterBar search={q} onSearch={setQ} placeholder={lang === "ar" ? "ابحث بالاسم أو البريد أو الهاتف…" : "Search name, email, phone…"} />
+      {pendingShareDate && (
+        <p className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden />
+          {lang === "ar"
+            ? `فيه مساهمة رأس مال جديدة: النسب اللي فوق شغالة لحد آخر الشهر، والنسب الجديدة هتبدأ من ${formatDate(pendingShareDate, lang)} لوحدها.`
+            : `A new capital contribution is waiting: the shares below apply to the end of the month; new shares start on ${formatDate(pendingShareDate, lang)} automatically.`}
+        </p>
+      )}
 
       {partners.length === 0 ? (
         <EmptyState message={t("partners.empty")} />
@@ -482,6 +476,11 @@ function PartnersPage() {
                     </TableCell>
                     <TableCell className="whitespace-nowrap px-4 py-3 text-center tabular-nums">
                       {formatMoney(ownership?.total_contributions ?? 0, currency, lang)}
+                      {Number(ownership?.open_loans ?? 0) > 0 && (
+                        <span className="block text-xs text-muted-foreground">
+                          {lang === "ar" ? "قرض مفتوح " : "Open loan "}{formatMoney(ownership?.open_loans ?? 0, currency, lang)}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap px-4 py-3 text-center tabular-nums">
                       {formatPercent(ownership?.ownership_percentage ?? 0, lang)}
@@ -497,7 +496,7 @@ function PartnersPage() {
                           <div className="flex flex-nowrap items-center justify-center gap-1">
                             {isSuper && (
                               <PartnerActionTip label={t("partners.addCapital")}>
-                                <Button size="icon" variant="outline" className="h-8 w-8" aria-label={t("partners.addCapital")} onClick={() => setCapitalFor(partner.id)}>
+                                <Button size="icon" variant="outline" className="h-8 w-8" aria-label={t("partners.addCapital")} onClick={() => setCapitalFor({ id: partner.id, name: partner.name })}>
                                   <CirclePlus />
                                 </Button>
                               </PartnerActionTip>
@@ -585,7 +584,7 @@ function PartnersPage() {
       {data && data.contributions.length > 0 && (
         <CollapsibleSection
           icon={<Landmark className="size-4" />}
-          title={lang === "ar" ? "سجل مساهمات رأس المال" : "Capital contributions log"}
+          title={lang === "ar" ? "سجل المساهمات والقروض" : "Contributions & loans log"}
           description={`${data.contributions.length} ${lang === "ar" ? "مساهمة" : "entries"}`}
           defaultOpen={false}
         >
@@ -598,7 +597,9 @@ function PartnersPage() {
                 <TableHead className="w-40 whitespace-nowrap text-end">
                   {t("common.amount")}
                 </TableHead>
-                <TableHead className="min-w-40 text-start">Ref</TableHead>
+                <TableHead className="w-32 whitespace-nowrap text-center">{lang === "ar" ? "النوع" : "Type"}</TableHead>
+                <TableHead className="min-w-48 text-start">{lang === "ar" ? "تأثيرها" : "Effect"}</TableHead>
+                <TableHead className="min-w-40 text-start">{lang === "ar" ? "مرجع" : "Ref"}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -612,6 +613,22 @@ function PartnersPage() {
                   </TableCell>
                   <TableCell className="w-40 whitespace-nowrap text-end tabular-nums">
                     {formatMoney(row.amount, currency, lang)}
+                  </TableCell>
+                  <TableCell className="w-32 whitespace-nowrap text-center">
+                    <Badge variant={row.kind === "loan" ? "outline" : "secondary"}>
+                      {row.kind === "loan" ? (lang === "ar" ? "قرض" : "Loan") : lang === "ar" ? "رأس مال" : "Capital"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="min-w-48 text-xs text-muted-foreground">
+                    {row.kind === "loan"
+                      ? Number(row.amount) - Number(row.repaid_amount) > 0
+                        ? lang === "ar"
+                          ? `اترد ${formatMoney(row.repaid_amount, currency, lang)} · باقي ${formatMoney(Number(row.amount) - Number(row.repaid_amount), currency, lang)}`
+                          : `Repaid ${formatMoney(row.repaid_amount, currency, lang)} · ${formatMoney(Number(row.amount) - Number(row.repaid_amount), currency, lang)} left`
+                        : lang === "ar" ? "اترد بالكامل" : "Fully repaid"
+                      : row.effective_from > businessToday()
+                        ? <span className="font-medium text-amber-600">{lang === "ar" ? `النسب الجديدة من ${formatDate(row.effective_from, lang)}` : `New shares from ${formatDate(row.effective_from, lang)}`}</span>
+                        : lang === "ar" ? `في النسب من ${formatDate(row.effective_from, lang)}` : `In shares since ${formatDate(row.effective_from, lang)}`}
                   </TableCell>
                   <TableCell className="min-w-40 text-muted-foreground">{row.reference ?? "—"}</TableCell>
                 </TableRow>
@@ -683,53 +700,7 @@ function PartnersPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(capitalFor)} onOpenChange={(value) => !value && setCapitalFor(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("partners.addCapital")}</DialogTitle>
-          </DialogHeader>
-          <p className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground transition-all duration-200">
-            {t("partners.capitalBookOnly")}
-          </p>
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <Label>{t("common.amount")}</Label>
-              <Input
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={capitalForm.amount}
-                onChange={(event) => setCapitalForm({ ...capitalForm, amount: event.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>{t("common.date")}</Label>
-              <Input
-                type="date"
-                value={capitalForm.date}
-                onChange={(event) => setCapitalForm({ ...capitalForm, date: event.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Ref</Label>
-              <Input
-                value={capitalForm.reference}
-                onChange={(event) =>
-                  setCapitalForm({ ...capitalForm, reference: event.target.value })
-                }
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={() => addCapital.mutate()}
-              disabled={!capitalForm.amount || Number(capitalForm.amount) <= 0}
-            >
-              {t("common.save")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ContributionDialog partner={capitalFor} onClose={() => setCapitalFor(null)} currency={currency} lang={lang} />
 
       <WithdrawalsSection currency={currency} />
     </div>

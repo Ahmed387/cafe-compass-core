@@ -912,6 +912,42 @@ export type Database = {
           },
         ]
       }
+      cost_recalcs: {
+        Row: {
+          company_id: string
+          cogs_delta: number
+          created_by: string | null
+          error: string | null
+          first_date: string | null
+          id: string
+          lines_changed: number
+          ran_at: string
+          reason: string
+        }
+        Insert: {
+          company_id: string
+          cogs_delta?: number
+          created_by?: string | null
+          error?: string | null
+          first_date?: string | null
+          id?: string
+          lines_changed?: number
+          ran_at?: string
+          reason: string
+        }
+        Update: {
+          company_id?: string
+          cogs_delta?: number
+          created_by?: string | null
+          error?: string | null
+          first_date?: string | null
+          id?: string
+          lines_changed?: number
+          ran_at?: string
+          reason?: string
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           barcode: string
@@ -1420,6 +1456,7 @@ export type Database = {
           min_qty: number
           name: string
           name_ar: string | null
+          opening_cost: number | null
           sku: string | null
           unit: string
           updated_at: string
@@ -1436,6 +1473,7 @@ export type Database = {
           min_qty?: number
           name: string
           name_ar?: string | null
+          opening_cost?: number | null
           sku?: string | null
           unit?: string
           updated_at?: string
@@ -1452,6 +1490,7 @@ export type Database = {
           min_qty?: number
           name?: string
           name_ar?: string | null
+          opening_cost?: number | null
           sku?: string | null
           unit?: string
           updated_at?: string
@@ -2010,6 +2049,7 @@ export type Database = {
       }
       order_refunds: {
         Row: {
+          business_date: string
           amount: number
           blamed_staff_id: string | null
           branch_id: string
@@ -2034,6 +2074,7 @@ export type Database = {
           wallet_amount: number
         }
         Insert: {
+          business_date?: string
           amount: number
           blamed_staff_id?: string | null
           branch_id: string
@@ -2058,6 +2099,7 @@ export type Database = {
           wallet_amount?: number
         }
         Update: {
+          business_date?: string
           amount?: number
           blamed_staff_id?: string | null
           branch_id?: string
@@ -2135,6 +2177,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          business_date: string
           branch_id: string
           cancel_reason: string | null
           cancelled_at: string | null
@@ -2161,6 +2204,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          business_date?: string
           branch_id: string
           cancel_reason?: string | null
           cancelled_at?: string | null
@@ -2187,6 +2231,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          business_date?: string
           branch_id?: string
           cancel_reason?: string | null
           cancelled_at?: string | null
@@ -2408,11 +2453,14 @@ export type Database = {
           created_at: string
           created_by: string | null
           currency: string
+          effective_from: string
           id: string
+          kind: string
           notes: string | null
           partner_id: string
           payment_method: string | null
           reference: string | null
+          repaid_amount: number
           reversal_of: string | null
           status: Database["public"]["Enums"]["record_status"]
         }
@@ -2423,11 +2471,14 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           currency?: string
+          effective_from?: string
           id?: string
+          kind?: string
           notes?: string | null
           partner_id: string
           payment_method?: string | null
           reference?: string | null
+          repaid_amount?: number
           reversal_of?: string | null
           status?: Database["public"]["Enums"]["record_status"]
         }
@@ -2438,11 +2489,14 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           currency?: string
+          effective_from?: string
           id?: string
+          kind?: string
           notes?: string | null
           partner_id?: string
           payment_method?: string | null
           reference?: string | null
+          repaid_amount?: number
           reversal_of?: string | null
           status?: Database["public"]["Enums"]["record_status"]
         }
@@ -4555,6 +4609,7 @@ export type Database = {
       }
       shifts: {
         Row: {
+          business_date: string
           branch_id: string
           cash_drop: number | null
           closed_at: string | null
@@ -4577,6 +4632,7 @@ export type Database = {
           variance: number | null
         }
         Insert: {
+          business_date?: string
           branch_id: string
           cash_drop?: number | null
           closed_at?: string | null
@@ -4599,6 +4655,7 @@ export type Database = {
           variance?: number | null
         }
         Update: {
+          business_date?: string
           branch_id?: string
           cash_drop?: number | null
           closed_at?: string | null
@@ -5012,9 +5069,11 @@ export type Database = {
       }
       stock_movements: {
         Row: {
+          business_date: string
           balance_after: number
           branch_id: string
           company_id: string
+          cost_event: boolean
           created_at: string
           created_by: string | null
           id: string
@@ -5030,9 +5089,11 @@ export type Database = {
           waste_staff_id: string | null
         }
         Insert: {
+          business_date?: string
           balance_after?: number
           branch_id: string
           company_id: string
+          cost_event?: boolean
           created_at?: string
           created_by?: string | null
           id?: string
@@ -5048,9 +5109,11 @@ export type Database = {
           waste_staff_id?: string | null
         }
         Update: {
+          business_date?: string
           balance_after?: number
           branch_id?: string
           company_id?: string
+          cost_event?: boolean
           created_at?: string
           created_by?: string | null
           id?: string
@@ -5770,6 +5833,7 @@ export type Database = {
         Row: {
           company_id: string | null
           name: string | null
+          open_loans: number | null
           ownership_percentage: number | null
           partner_id: string | null
           total_contributions: number | null
@@ -6493,6 +6557,17 @@ export type Database = {
         }
         Returns: string
       }
+      pending_shift_shortages: {
+        Args: never
+        Returns: {
+          business_date: string
+          cashier: string
+          closed_at: string
+          opened_at: string
+          shift_id: string
+          shortage: number
+        }[]
+      }
       pay_salary: {
         Args: { _account_id?: string; _method?: string; _salary_id: string }
         Returns: string
@@ -6595,11 +6670,33 @@ export type Database = {
         }
         Returns: Json
       }
+      recost_sales_now: { Args: never; Returns: Json }
       recalc_order_totals: { Args: { _order_id: string }; Returns: undefined }
       receive_purchase: { Args: { _purchase_id: string }; Returns: string }
       recompute_capital_equity: {
         Args: { _company_id: string }
         Returns: undefined
+      }
+      preview_partner_contribution: {
+        Args: {
+          _amount: number
+          _contribution_date?: string
+          _kind?: string
+          _partner_id: string
+        }
+        Returns: Json
+      }
+      record_partner_contribution: {
+        Args: {
+          _amount: number
+          _contribution_date?: string
+          _kind: string
+          _notes?: string
+          _partner_id: string
+          _payment_method?: string
+          _reference?: string
+        }
+        Returns: string
       }
       record_capital_contribution: {
         Args: {

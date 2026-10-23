@@ -918,7 +918,8 @@ function PosPage() {
       toast.error(lang === "ar" ? "الفكة المتبقية أكبر من المبلغ المعدود" : "Retained float exceeds counted cash");
       return;
     }
-    if (closeShortage > 0) {
+    // Only a super admin decides who carries a shortage; anyone else closes and it waits for them.
+    if (closeShortage > 0 && isSuperAdmin) {
       if (shortageMode === "staff" && !shortageStaffId) {
         toast.error(lang === "ar" ? "اختر الموظف الذي سيتحمل العجز" : "Select the staff member who carries the shortage");
         return;
@@ -988,7 +989,9 @@ function PosPage() {
       retainedFloat: float,
       variance: Math.round((counted - preview.expected_cash) * 100) / 100,
       shortage:
-        closeShortage > 0
+        closeShortage > 0 && !isSuperAdmin
+          ? { modeLabel: ar ? "مستني قرار السوبر أدمن" : "Waiting for the super admin", detail: null }
+          : closeShortage > 0
           ? {
               modeLabel:
                 shortageMode === "split"
@@ -2944,7 +2947,8 @@ function PosPage() {
                     <span className="absolute inset-y-0 end-4 grid place-items-center text-sm font-bold text-muted-foreground">{currency}</span>
                   </div>
                 </div>
-                {closingCash !== "" && retainedFloat !== "" && (
+                {/* An empty float counts as 0, so nobody is stuck on a blank field. */}
+                {closingCash !== "" && (
                   <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl bg-accent/15 px-5 py-4">
                     <span className="text-sm font-bold text-foreground">{lang === "ar" ? "المبلغ المورد للخزينة" : "Cash drop to safe"}</span>
                     <span className="shrink-0 font-display text-2xl font-black tabular-nums text-accent-foreground">
@@ -2952,16 +2956,44 @@ function PosPage() {
                     </span>
                   </div>
                 )}
-                {closingCash !== "" && closeShortage > 0 && (
+                {closingCash !== "" && closeShortage > 0 && !isSuperAdmin && (
+                  <div className="grid gap-1 rounded-2xl border border-destructive/30 bg-destructive/5 p-5">
+                    <p className="font-display text-base font-bold text-destructive">
+                      {lang === "ar"
+                        ? `عجز في الدرج ${formatMoney(closeShortage, currency, lang)}`
+                        : `Drawer shortage ${formatMoney(closeShortage, currency, lang)}`}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {lang === "ar"
+                        ? "هيتسجل على الوردية دي، والسوبر أدمن هيوصله تنبيه ويحدد مين يتحمله."
+                        : "It is recorded on this shift; the super admin gets a warning and decides who bears it."}
+                    </p>
+                  </div>
+                )}
+                {closingCash !== "" && closeShortage < 0 && (
+                  <div className="grid gap-1 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5">
+                    <p className="font-display text-base font-bold text-amber-700 dark:text-amber-400">
+                      {lang === "ar"
+                        ? `زيادة في الدرج ${formatMoney(-closeShortage, currency, lang)}`
+                        : `Drawer overage ${formatMoney(-closeShortage, currency, lang)}`}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {lang === "ar"
+                        ? "هتنزل الخزنة مع الوردية، والسوبر أدمن هيوصله تنبيه يراجعها."
+                        : "It goes to the treasury with the shift; the super admin gets a warning to review it."}
+                    </p>
+                  </div>
+                )}
+                {closingCash !== "" && closeShortage > 0 && isSuperAdmin && (
                   <div className="grid gap-4 rounded-2xl border border-destructive/30 bg-destructive/5 p-5">
                     <div className="grid gap-1">
                       <p className="font-display text-base font-bold text-destructive">
-                        {lang === "ar" ? "عجز في الدرج — اختر طريقة التحميل" : "Drawer shortage — choose who carries it"}
+                        {lang === "ar" ? "عجز في الدرج — مين يتحمله؟" : "Drawer shortage — who carries it?"}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {lang === "ar"
-                          ? `العجز ${formatMoney(closeShortage, currency, lang)} — لن تُغلق الوردية قبل تحديد من يتحمله`
-                          : `Shortage ${formatMoney(closeShortage, currency, lang)} — the shift cannot close until it is attributed`}
+                          ? `العجز ${formatMoney(closeShortage, currency, lang)} هيتسجل على الوردية دي.`
+                          : `The ${formatMoney(closeShortage, currency, lang)} shortage is recorded on this shift.`}
                       </p>
                     </div>
                     <div className="grid gap-2.5">
@@ -3079,8 +3111,8 @@ function PosPage() {
                 closeShift.isPending ||
                 (refundsToDecide.data?.length ?? 0) > 0 ||
                 closingCash === "" ||
-                retainedFloat === "" ||
                 (closeShortage > 0 &&
+                  isSuperAdmin &&
                   ((shortageMode === "staff" && !shortageStaffId) ||
                     (shortageMode === "split" && shortageStaff.length === 0) ||
                     (shortageMode === "venue" && !venueReasonValid)))
