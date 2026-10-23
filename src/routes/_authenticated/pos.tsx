@@ -2947,7 +2947,8 @@ function PosPage() {
                     <span className="absolute inset-y-0 end-4 grid place-items-center text-sm font-bold text-muted-foreground">{currency}</span>
                   </div>
                 </div>
-                {closingCash !== "" && retainedFloat !== "" && (
+                {/* An empty float counts as 0, so nobody is stuck on a blank field. */}
+                {closingCash !== "" && (
                   <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl bg-accent/15 px-5 py-4">
                     <span className="text-sm font-bold text-foreground">{lang === "ar" ? "المبلغ المورد للخزينة" : "Cash drop to safe"}</span>
                     <span className="shrink-0 font-display text-2xl font-black tabular-nums text-accent-foreground">
@@ -3110,7 +3111,6 @@ function PosPage() {
                 closeShift.isPending ||
                 (refundsToDecide.data?.length ?? 0) > 0 ||
                 closingCash === "" ||
-                retainedFloat === "" ||
                 (closeShortage > 0 &&
                   isSuperAdmin &&
                   ((shortageMode === "staff" && !shortageStaffId) ||
