@@ -2414,11 +2414,14 @@ export type Database = {
           created_at: string
           created_by: string | null
           currency: string
+          effective_from: string
           id: string
+          kind: string
           notes: string | null
           partner_id: string
           payment_method: string | null
           reference: string | null
+          repaid_amount: number
           reversal_of: string | null
           status: Database["public"]["Enums"]["record_status"]
         }
@@ -2429,11 +2432,14 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           currency?: string
+          effective_from?: string
           id?: string
+          kind?: string
           notes?: string | null
           partner_id: string
           payment_method?: string | null
           reference?: string | null
+          repaid_amount?: number
           reversal_of?: string | null
           status?: Database["public"]["Enums"]["record_status"]
         }
@@ -2444,11 +2450,14 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           currency?: string
+          effective_from?: string
           id?: string
+          kind?: string
           notes?: string | null
           partner_id?: string
           payment_method?: string | null
           reference?: string | null
+          repaid_amount?: number
           reversal_of?: string | null
           status?: Database["public"]["Enums"]["record_status"]
         }
@@ -5782,6 +5791,7 @@ export type Database = {
         Row: {
           company_id: string | null
           name: string | null
+          open_loans: number | null
           ownership_percentage: number | null
           partner_id: string | null
           total_contributions: number | null
@@ -6623,6 +6633,27 @@ export type Database = {
       recompute_capital_equity: {
         Args: { _company_id: string }
         Returns: undefined
+      }
+      preview_partner_contribution: {
+        Args: {
+          _amount: number
+          _contribution_date?: string
+          _kind?: string
+          _partner_id: string
+        }
+        Returns: Json
+      }
+      record_partner_contribution: {
+        Args: {
+          _amount: number
+          _contribution_date?: string
+          _kind: string
+          _notes?: string
+          _partner_id: string
+          _payment_method?: string
+          _reference?: string
+        }
+        Returns: string
       }
       record_capital_contribution: {
         Args: {

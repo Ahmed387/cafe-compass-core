@@ -215,6 +215,9 @@ export function PayoutWizard({
               <Row label={ar ? "صافي ربح الفترة" : "Net profit"} value={money(p.net_profit)} />
               <Row label={ar ? "− رواتب الإدارة بالنسبة (اللي لسه متسجلتش)" : "− Management % pay not yet in payroll"} value={money(p.management_salary_due)} />
               <Row label={ar ? `− الاحتياطي التشغيلي (${p.reserve_type === "amount" ? money(p.reserve_value) : formatPercent(p.reserve_value, lang)})` : `− Operating reserve (${p.reserve_type === "amount" ? money(p.reserve_value) : formatPercent(p.reserve_value, lang)})`} value={money(p.reserve_amount)} />
+              {p.loan_repayment > 0 && (
+                <Row label={ar ? "− سداد قروض الشركاء (قبل التوزيع)" : "− Partner loans repaid (before payout)"} value={money(p.loan_repayment)} />
+              )}
               <Row label={ar ? "− صندوق التطوير" : "− Development fund"} value={money(fund)} />
               <Row strong label={ar ? "نصيب الشركاء" : "Partner pool"} value={stale ? "…" : money(p.partner_pool)} />
             </div>
@@ -229,6 +232,43 @@ export function PayoutWizard({
         {step === 3 && p && (
           <div className="space-y-4">
             <p className="text-sm font-semibold">{rangeLabel(from, to, lang)}</p>
+            {(p.segments?.length ?? 0) > 1 && (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                <p className="font-medium">
+                  {ar ? "النسب اتغيرت جوه الفترة دي، فكل جزء اتوزع بنسبه:" : "Shares changed inside this range, so each part uses its own shares:"}
+                </p>
+                <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                  {p.segments.map((s, i) => (
+                    <li key={s.from}>
+                      {rangeLabel(s.from, s.to, lang)}: {ar ? "ربح" : "profit"} {money(s.net_profit)} ·{" "}
+                      {i === 0 ? (ar ? "بالنسب القديمة" : "old shares") : ar ? "بالنسب الجديدة" : "new shares"}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {ar ? "النسبة اللي جنب كل شريك تحت هي حصيلة الجزئين." : "The share shown next to each partner is the blend of both parts."}
+                </p>
+              </div>
+            )}
+            {p.loans?.some((l) => l.repay > 0) && (
+              <div className="rounded-xl border p-3 text-sm">
+                <p className="font-medium">{ar ? "قروض بترجع لأصحابها قبل التوزيع" : "Loans repaid before the payout"}</p>
+                <ul className="mt-1 space-y-0.5 text-xs">
+                  {p.loans.filter((l) => l.repay > 0).map((l) => (
+                    <li key={l.contribution_id} className="flex justify-between gap-3">
+                      <span>{l.name}</span>
+                      <span className="tabular-nums">
+                        {money(l.repay)}
+                        {l.carried > 0 && <span className="text-amber-600"> · {ar ? `باقي ${money(l.carried)}` : `${money(l.carried)} left`}</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {ar ? "المبلغ ده بيتضاف على رصيد صاحب القرض، وتقدر تصرفهوله زي الأرباح." : "This is added to the lender's balance and can be paid out like dividends."}
+                </p>
+              </div>
+            )}
             <div className="overflow-x-auto rounded-xl border">
               <table className="w-full min-w-[600px] text-sm">
                 <thead className="bg-muted text-xs text-muted-foreground">

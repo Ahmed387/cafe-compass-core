@@ -79,11 +79,17 @@ export type PayoutPreview = {
   reserve_type: "percent" | "amount";
   reserve_value: number;
   reserve_amount: number;
+  /** Profit left after reserve, before partner loans are repaid. */
+  available_before_loans: number;
+  loan_repayment: number;
+  loans: Array<{ contribution_id: string; partner_id: string; name: string; date: string; open: number; repay: number; carried: number }>;
   available_before_fund: number;
   development_fund: number;
   partner_pool: number;
   retained_paused: number;
   lines: PayoutLine[];
+  /** Share periods inside the range; more than one when shares changed. */
+  segments: Array<{ from: string; to: string; net_profit: number; shares: Record<string, number> }>;
   sustainability: Sustainability;
   checks: Record<
     | "range_valid" | "no_overlap" | "no_open_shifts" | "no_open_orders" | "net_positive"
