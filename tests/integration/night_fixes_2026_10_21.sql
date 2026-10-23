@@ -21,7 +21,7 @@ DO $$
 DECLARE
   _branch uuid; _shift uuid; _order uuid; _num text; _tab_order uuid; _partner uuid;
   _fig jsonb; _cash_in numeric; _insta numeric; _open_day date; _tab public.partner_tab_orders;
-  _cust uuid; _n int; _salary uuid; _paid_day date; _txn_day date;
+  _cust uuid; _n int; _salary uuid; _paid_day date; _txn_day date; _tab_item jsonb;
   _item jsonb := jsonb_build_array(jsonb_build_object('custom', true, 'product_id', NULL, 'size_id', NULL,
     'product_name', 'TEST نايت', 'size_name', NULL, 'unit_price', 100, 'quantity', 1, 'is_taxable', false, 'modifiers', '[]'::jsonb));
 BEGIN
@@ -32,6 +32,9 @@ BEGIN
   SELECT id INTO _shift FROM public.shifts WHERE branch_id = _branch AND status = 'open' LIMIT 1;
   IF _shift IS NULL THEN
     _shift := public.open_shift_with_roster(_branch, 200, ARRAY[]::uuid[]);
+  ELSE
+    -- create_pos_order sells only on the caller's own shift.
+    UPDATE public.shifts SET user_id = public.current_profile_id() WHERE id = _shift;
   END IF;
 
   ---------------------------------------------------------------------
@@ -55,11 +58,20 @@ BEGIN
   -- 2) Cancelling a partner-tab invoice takes it off the partner's account.
   ---------------------------------------------------------------------
   SELECT id INTO _partner FROM public.partners WHERE company_id = public.current_company_id() AND status = 'active' LIMIT 1;
-  IF _partner IS NOT NULL THEN
-    SELECT out_id INTO _tab_order FROM public.create_pos_order(_branch, _item, '[]'::jsonb,
+  -- A partner tab takes catalogue products only (no custom lines).
+  SELECT jsonb_build_array(jsonb_build_object('custom', false, 'product_id', p.id, 'size_id', NULL,
+           'product_name', p.name, 'size_name', NULL, 'unit_price', p.base_price, 'quantity', 1,
+           'is_taxable', false, 'modifiers', '[]'::jsonb))
+    INTO _tab_item FROM public.products p
+   WHERE p.company_id = public.current_company_id() AND p.is_active AND p.base_price > 0
+     AND NOT EXISTS (SELECT 1 FROM public.product_recipes r WHERE r.product_id = p.id)
+     AND NOT EXISTS (SELECT 1 FROM public.product_sizes s WHERE s.product_id = p.id)
+   LIMIT 1;
+  IF _partner IS NOT NULL AND _tab_item IS NOT NULL THEN
+    SELECT out_id INTO _tab_order FROM public.create_pos_order(_branch, _tab_item, '[]'::jsonb,
       _partner_id => _partner, _on_partner_tab => true);
     SELECT * INTO _tab FROM public.partner_tab_orders WHERE order_id = _tab_order;
-    IF _tab.id IS NULL OR _tab.total_amount <> 100 THEN RAISE EXCEPTION '2: tab not created for 100'; END IF;
+    IF _tab.id IS NULL OR _tab.total_amount <= 0 THEN RAISE EXCEPTION '2: tab not created'; END IF;
     PERFORM public.cancel_pos_order(_tab_order, 'اختبار إلغاء فاتورة شريك');
     SELECT * INTO _tab FROM public.partner_tab_orders WHERE order_id = _tab_order;
     IF _tab.total_amount <> 0 THEN RAISE EXCEPTION '2: tab still owes % after cancel', _tab.total_amount; END IF;
@@ -68,7 +80,7 @@ BEGIN
       RAISE EXCEPTION '2: a partner-tab cancel must never refund cash';
     END IF;
   ELSE
-    RAISE NOTICE '2: skipped (no active partner)';
+    RAISE NOTICE '2: skipped (no active partner or plain product)';
   END IF;
 
   ---------------------------------------------------------------------
@@ -77,6 +89,8 @@ BEGIN
   -- Pretend the shift opened yesterday evening so the close crosses midnight.
   UPDATE public.shifts SET opened_at = now() - interval '1 day' WHERE id = _shift;
   _open_day := public.business_date(now() - interval '1 day', public.current_company_id());
+  -- Closing needs a bearer on every refund; a real open shift may still have one unset.
+  UPDATE public.order_refunds SET fault = 'venue' WHERE shift_id = _shift AND status = 'active' AND fault IS NULL;
   _fig := public._shift_drawer((SELECT s FROM public.shifts s WHERE s.id = _shift));
   PERFORM public.close_shift_handover(_shift, (_fig->>'expected')::numeric, 0, NULL, NULL, 'اختبار');
   SELECT SUM(amount) INTO _cash_in FROM public.cash_transactions

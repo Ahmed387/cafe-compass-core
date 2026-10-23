@@ -56,7 +56,7 @@ BEGIN
   IF _r.id IS NULL OR _r.status <> 'active' THEN RAISE EXCEPTION 'المرتجع مش موجود'; END IF;
   SELECT * INTO _s FROM public.shifts WHERE id = _r.shift_id;
   IF _s.id IS NOT NULL AND NOT public.can_access_branch(_s.branch_id) THEN RAISE EXCEPTION 'Not authorized for this branch'; END IF;
-  IF _r.fault IS NOT DISTINCT FROM _fault AND _r.blamed_staff_id IS NOT DISTINCT FROM CASE WHEN _fault = 'staff' THEN _staff_id END THEN
+  IF _r.fault IS NOT DISTINCT FROM _fault AND _r.blamed_staff_id IS NOT DISTINCT FROM (CASE WHEN _fault = 'staff' THEN _staff_id END) THEN
     RETURN jsonb_build_object('refund_id', _r.id, 'fault', _fault, 'changed', false);
   END IF;
 
