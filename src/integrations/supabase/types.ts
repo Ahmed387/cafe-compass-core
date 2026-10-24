@@ -2072,6 +2072,10 @@ export type Database = {
           status: Database["public"]["Enums"]["record_status"]
           tax_amount: number
           wallet_amount: number
+          is_cancellation: boolean
+          reclassified_at: string | null
+          reclassified_by: string | null
+          reclassify_note: string | null
         }
         Insert: {
           business_date?: string
@@ -2097,6 +2101,10 @@ export type Database = {
           status?: Database["public"]["Enums"]["record_status"]
           tax_amount?: number
           wallet_amount?: number
+          is_cancellation?: boolean
+          reclassified_at?: string | null
+          reclassified_by?: string | null
+          reclassify_note?: string | null
         }
         Update: {
           business_date?: string
@@ -2122,6 +2130,10 @@ export type Database = {
           status?: Database["public"]["Enums"]["record_status"]
           tax_amount?: number
           wallet_amount?: number
+          is_cancellation?: boolean
+          reclassified_at?: string | null
+          reclassified_by?: string | null
+          reclassify_note?: string | null
         }
         Relationships: [
           {
@@ -2992,31 +3004,58 @@ export type Database = {
           amount: number
           company_id: string
           created_at: string
-          distribution_id: string
+          distribution_id: string | null
           id: string
           partner_id: string
           status: Database["public"]["Enums"]["record_status"]
           tab_order_id: string
+          batch_id: string | null
+          cash_account_id: string | null
+          cash_txn_id: string | null
+          created_by: string | null
+          ledger_txn_id: string | null
+          method_key: string | null
+          mode: string
+          notes: string | null
+          settled_on: string | null
         }
         Insert: {
           amount: number
           company_id: string
           created_at?: string
-          distribution_id: string
+          distribution_id?: string | null
           id?: string
           partner_id: string
           status?: Database["public"]["Enums"]["record_status"]
           tab_order_id: string
+          batch_id?: string | null
+          cash_account_id?: string | null
+          cash_txn_id?: string | null
+          created_by?: string | null
+          ledger_txn_id?: string | null
+          method_key?: string | null
+          mode?: string
+          notes?: string | null
+          settled_on?: string | null
         }
         Update: {
           amount?: number
           company_id?: string
           created_at?: string
-          distribution_id?: string
+          distribution_id?: string | null
           id?: string
           partner_id?: string
           status?: Database["public"]["Enums"]["record_status"]
           tab_order_id?: string
+          batch_id?: string | null
+          cash_account_id?: string | null
+          cash_txn_id?: string | null
+          created_by?: string | null
+          ledger_txn_id?: string | null
+          method_key?: string | null
+          mode?: string
+          notes?: string | null
+          settled_on?: string | null
         }
         Relationships: [
           {
@@ -4431,6 +4470,7 @@ export type Database = {
           status: Database["public"]["Enums"]["record_status"]
           updated_at: string
           user_id: string
+          pnl_month: string | null
         }
         Insert: {
           absence_deduction?: number
@@ -4454,6 +4494,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["record_status"]
           updated_at?: string
           user_id: string
+          pnl_month?: string | null
         }
         Update: {
           absence_deduction?: number
@@ -4477,6 +4518,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["record_status"]
           updated_at?: string
           user_id?: string
+          pnl_month?: string | null
         }
         Relationships: [
           {

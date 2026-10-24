@@ -93,9 +93,15 @@ export type PayoutPreview = {
   sustainability: Sustainability;
   checks: Record<
     | "range_valid" | "no_overlap" | "no_open_shifts" | "no_open_orders" | "net_positive"
-    | "fund_within_limit" | "partner_pool_positive" | "shares_total_100",
+    | "fund_within_limit" | "partner_pool_positive" | "shares_total_100" | "payroll_recorded",
     boolean
   >;
+  /** Employees with a salary and no salary line for a month in the range (blocks the payout). */
+  payroll_missing?: {
+    lines: Array<{ user_id: string; name: string; month: string; estimate: number }>;
+    total: number;
+    count: number;
+  };
   overlaps: Array<{ id: string; from: string; to: string }>;
   open_shifts: number;
   open_orders: number;

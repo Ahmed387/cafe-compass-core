@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatMoney, formatPercent, friendlyError } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { PayoutPreview } from "@/modules/finance/finance-queries";
+import { monthLabel } from "@/core/finance/salary-month";
 
 type Lang = "ar" | "en";
 
@@ -27,6 +28,7 @@ const CHECK_TEXT: Record<keyof PayoutPreview["checks"], { ar: string; en: string
   fund_within_limit: { ar: "صندوق التطوير مش أكبر من الربح المتاح", en: "Development fund within available profit" },
   partner_pool_positive: { ar: "فاضل نصيب للشركاء بعد الصندوق", en: "Something left for partners after the fund" },
   shares_total_100: { ar: "نسب الشركاء مجموعها ١٠٠٪", en: "Partner shares total 100%" },
+  payroll_recorded: { ar: "مرتبات الفترة كلها اتسجلت", en: "Every salary for the range is recorded" },
 };
 
 function useDebounced<T>(value: T, ms = 400): T {
@@ -184,6 +186,9 @@ export function PayoutWizard({
               </div>
             )}
             <ChecksList checks={checks} includeFund={false} lang={lang} loading={preview.isLoading} />
+            {checks && !checks.payroll_recorded && p?.payroll_missing && (
+              <PayrollMissing missing={p.payroll_missing} money={money} lang={lang} />
+            )}
           </div>
         )}
 
@@ -361,6 +366,47 @@ function ChecksList({
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Salaries not recorded yet: the profit would be overstated, so the payout waits for them. */
+function PayrollMissing({
+  missing,
+  money,
+  lang,
+}: {
+  missing: NonNullable<PayoutPreview["payroll_missing"]>;
+  money: (v: number) => string;
+  lang: Lang;
+}) {
+  const ar = lang === "ar";
+  const month = (m: string) => monthLabel(m.slice(0, 7), lang);
+  return (
+    <div className="space-y-2 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-sm">
+      <p className="font-semibold text-destructive">
+        {ar
+          ? `مينفعش نوزع: ${missing.count} مرتب لسه ما اتسجلش (تقريباً ${money(missing.total)})`
+          : `Can't pay out: ${missing.count} salaries not recorded yet (about ${money(missing.total)})`}
+      </p>
+      <p className="text-muted-foreground">
+        {ar
+          ? "لو وزعنا دلوقتي، صافي الربح هيطلع أكبر من الحقيقي بالمبلغ ده والشركاء ياخدوا فلوس المرتبات. اصرف أو سجّل المرتبات دي من صفحة الرواتب الأول."
+          : "Paying out now would overstate profit by this amount and hand salary money to partners. Pay or issue these salaries on the payroll page first."}
+      </p>
+      <ul className="space-y-1">
+        {missing.lines.map((l) => (
+          <li key={`${l.user_id}-${l.month}`} className="flex justify-between gap-3 rounded-lg bg-background/60 px-3 py-1.5">
+            <span>
+              {l.name} · {month(l.month)}
+            </span>
+            <span className="tabular-nums">{money(l.estimate)}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted-foreground">
+        {ar ? "المبلغ تقديري: صافي المرتب + السلف، للأيام اللي جوه الفترة." : "Estimate: net pay + advances, for the days inside the range."}
+      </p>
+    </div>
   );
 }
 

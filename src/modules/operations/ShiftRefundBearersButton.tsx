@@ -47,6 +47,8 @@ export function ShiftRefundBearersButton({ shiftId, currency, lang }: { shiftId:
         .select("id, amount, reason, fault, blamed_staff_id, method_key, orders(order_number)" as "id")
         .eq("shift_id", shiftId)
         .eq("status", "active")
+        // A cancelled item is not a refund: nobody bears it.
+        .eq("is_cancellation", false)
         .order("created_at");
       if (error) throw error;
       return (data ?? []) as unknown as RefundRow[];

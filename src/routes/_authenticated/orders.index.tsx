@@ -1,4 +1,4 @@
-import { addDays, businessToday } from "@/core/finance/business-dates";
+import { addDays, businessToday, shiftCloseLabel } from "@/core/finance/business-dates";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -389,7 +389,7 @@ function OrdersPage() {
       const { data, error } = await supabase
         .from("shifts")
         .select(
-          "id, branch_id, status, opening_cash, closing_cash, expected_cash, variance, shortage_resolution, opened_at, closed_at, notes, branches(name), user_profiles!shifts_user_id_fkey(display_name, first_name)",
+          "id, branch_id, status, business_date, opening_cash, closing_cash, expected_cash, variance, shortage_resolution, opened_at, closed_at, notes, branches(name), user_profiles!shifts_user_id_fkey(display_name, first_name)",
         )
         .eq("branch_id", currentBranchId!)
         .order("opened_at", { ascending: false })
@@ -473,9 +473,12 @@ function OrdersPage() {
         shiftNumber: shiftNumbers.data?.[shift.id] ?? 0,
         cashier: profile?.display_name || profile?.first_name || "—",
         branch: branch?.name ?? "—",
-        fileDate: shift.opened_at.slice(0, 10),
+        fileDate: shift.business_date ?? shift.opened_at.slice(0, 10),
         openedAt: formatDateTime(shift.opened_at, "ar"),
-        closedAt: formatDateTime(shift.closed_at, "ar"),
+        closedAt: (() => {
+          const close = shiftCloseLabel(shift.business_date, shift.closed_at, "ar");
+          return close.nextDay ? `${close.label} (الوقت الفعلي ${close.actual})` : close.label;
+        })(),
         openingCash: Number(shift.opening_cash),
         cashSales,
         cardSales,
@@ -1079,7 +1082,20 @@ function OrdersPage() {
                             {formatDateTime(row.opened_at, lang)}
                           </TableCell>
                           <TableCell className="w-44 whitespace-nowrap text-center">
-                            {formatDateTime(row.closed_at, lang)}
+                            {(() => {
+                              // A shift belongs to the day it opened; the real close time stays visible for audit.
+                              const close = shiftCloseLabel(row.business_date, row.closed_at, lang);
+                              return (
+                                <span title={close.actual}>
+                                  {close.label}
+                                  {close.nextDay && (
+                                    <span className="block text-xs text-muted-foreground">
+                                      {lang === "ar" ? `الوقت الفعلي: ${close.actual}` : `Actual: ${close.actual}`}
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell className="w-36 whitespace-nowrap text-end tabular-nums">
                             {formatMoney(row.opening_cash, currency, lang)}

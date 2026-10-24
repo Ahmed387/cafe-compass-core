@@ -3,7 +3,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { EmptyState, NoPermission, PageHeader } from "@/components/layout/AppShell";
+import { RefundReclassifyDialog } from "@/components/orders/RefundReclassifyDialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -20,6 +22,7 @@ import { formatDateTime, formatMoney } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { invoiceSequence } from "@/lib/receipt";
 import { addDays, businessToday } from "@/core/finance/business-dates";
+import { isCancellation, splitRefundStats } from "@/core/finance/cancellations";
 
 export const Route = createFileRoute("/_authenticated/refunds")({
   head: () => ({
@@ -55,6 +58,8 @@ type RefundRow = {
   reason: string | null;
   status: string;
   origin: string | null;
+  is_cancellation: boolean | null;
+  reclassify_note: string | null;
   items_payload: RefundEntry[] | null;
   orders: {
     shift_id: string | null;
@@ -78,6 +83,8 @@ function RefundsPage() {
   const [shiftNo, setShiftNo] = useState("");
   const [from, setFrom] = useState(isoDay(-29));
   const [to, setTo] = useState(isoDay(0));
+  const [switching, setSwitching] = useState<string | null>(null);
+  const isSuperAdmin = Boolean(me?.roleNames?.includes("Super Admin"));
 
   // Same sequential drawer numbering as the orders screen, for reconciliation.
   const shiftNumbers = useQuery({
@@ -106,7 +113,7 @@ function RefundsPage() {
       let query = supabase
         .from("order_refunds")
         .select(
-          "id, created_at, kind, amount, tax_amount, method_key, reason, status, origin, items_payload, orders!inner(shift_id, order_number, customer_name, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name))",
+          "id, created_at, kind, amount, tax_amount, method_key, reason, status, origin, is_cancellation, reclassify_note, items_payload, orders!inner(shift_id, order_number, customer_name, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name))",
         )
         .eq("orders.branch_id", currentBranchId!)
         .gte("business_date", from)
@@ -150,20 +157,8 @@ function RefundsPage() {
   const rows = (refunds.data ?? []).filter(
     (row) => !shiftNo || String(row.orders?.shift_id ? shiftNumbers.data?.[row.orders.shift_id] ?? "" : "") === shiftNo,
   );
-  const stats = rows.reduce(
-    (acc, row) => {
-      acc.count += 1;
-      acc.total += Number(row.amount);
-      if ((row.method_key ?? "cash") === "cash") acc.cash += Number(row.amount);
-      for (const entry of row.items_payload ?? []) {
-        if (entry.disposition === "waste") {
-          acc.waste += Number(entry.unit_cost ?? 0) * Number(entry.quantity ?? 0);
-        }
-      }
-      return acc;
-    },
-    { count: 0, total: 0, cash: 0, waste: 0 },
-  );
+  // Cancelled items are not refunds: counted apart (owner rule 2026-10-24).
+  const stats = splitRefundStats(rows);
 
   if (!canView) return <NoPermission message={t("common.noAccess")} />;
 
@@ -212,7 +207,7 @@ function RefundsPage() {
         </div>
       </div>
 
-      <div className="stagger mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="stagger mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-xs text-muted-foreground">{ar ? "عدد المرتجعات" : "Refunds"}</p>
           <p className="mt-1 text-xl font-bold tabular-nums">{stats.count}</p>
@@ -233,6 +228,15 @@ function RefundsPage() {
           <p className="text-xs text-muted-foreground">{t("refunds.waste")}</p>
           <p className="mt-1 text-xl font-bold tabular-nums">
             {formatMoney(stats.waste, currency, lang)}
+          </p>
+        </div>
+        <div className="rounded-lg border border-dashed border-border bg-card p-4">
+          <p className="text-xs text-muted-foreground">
+            {ar ? "أصناف ملغية بعد الدفع (مش مرتجع)" : "Cancelled after payment (not refunds)"}
+          </p>
+          <p className="mt-1 text-xl font-bold tabular-nums">
+            {formatMoney(stats.cancelTotal, currency, lang)}
+            <span className="ms-2 text-xs font-normal text-muted-foreground">× {stats.cancelCount}</span>
           </p>
         </div>
       </div>
@@ -267,6 +271,7 @@ function RefundsPage() {
                 <TableHead className="w-32 whitespace-nowrap text-center">
                   {t("audit.user")}
                 </TableHead>
+                {isSuperAdmin && <TableHead className="w-28 whitespace-nowrap text-center" />}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -274,8 +279,9 @@ function RefundsPage() {
                 const wasteOnly =
                   (row.items_payload ?? []).length > 0 &&
                   (row.items_payload ?? []).every((entry) => entry.disposition === "waste");
+                const cancelled = isCancellation(row);
                 return (
-                  <TableRow key={row.id}>
+                  <TableRow key={row.id} className={cancelled ? "text-muted-foreground" : undefined}>
                     <TableCell className="w-44 whitespace-nowrap text-center">
                       {formatDateTime(row.created_at, lang)}
                     </TableCell>
@@ -304,18 +310,35 @@ function RefundsPage() {
                       {formatMoney(row.amount, currency, lang)}
                     </TableCell>
                     <TableCell className="w-28 text-center">
-                      <Badge variant={wasteOnly ? "destructive" : "outline"}>
-                        {wasteOnly
-                          ? t("orders.waste")
-                          : row.kind === "full"
-                            ? t("orders.refundFull")
-                            : t("orders.refundPartial")}
+                      <Badge variant={cancelled ? "secondary" : wasteOnly ? "destructive" : "outline"}>
+                        {cancelled
+                          ? ar ? "إلغاء" : "Cancelled"
+                          : wasteOnly
+                            ? t("orders.waste")
+                            : row.kind === "full"
+                              ? t("orders.refundFull")
+                              : t("orders.refundPartial")}
                       </Badge>
                     </TableCell>
                     <TableCell className="min-w-40 max-w-64 text-xs text-muted-foreground">
                       {row.reason ?? "—"}
+                      {row.reclassify_note && (
+                        <span className="mt-1 block">
+                          {ar ? "اتغيّر نوعها: " : "Type switched: "}
+                          {row.reclassify_note}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="w-32 text-center text-xs">{cashierName(row)}</TableCell>
+                    {isSuperAdmin && (
+                      <TableCell className="w-28 text-center">
+                        {(row.origin === "void" || row.origin === "cancel") && (
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSwitching(row.id)}>
+                            {cancelled ? (ar ? "خليه مرتجع" : "Make refund") : (ar ? "خليه إلغاء" : "Make cancellation")}
+                          </Button>
+                        )}
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}
@@ -323,6 +346,7 @@ function RefundsPage() {
           </Table>
         </div>
       )}
+      <RefundReclassifyDialog refundId={switching} currency={currency} lang={lang} onClose={() => setSwitching(null)} />
     </div>
   );
 }

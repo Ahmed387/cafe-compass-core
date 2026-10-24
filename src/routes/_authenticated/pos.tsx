@@ -62,6 +62,7 @@ import { addTender, singleTender, summarizePayments, toServerPayments, type Tend
 import { toggleExtraOnOneUnit } from "@/modules/operations/cart-extras";
 import { SoldOutToggle } from "@/modules/operations/SoldOutToggle";
 import { BarLowStockAlert, LowStockCardBadge, useBarLowStock } from "@/modules/supply/bar-low-stock";
+import { splitRefundStats } from "@/core/finance/cancellations";
 import {
   ShiftExpenseDialog,
   ShiftRosterDialog,
@@ -373,28 +374,14 @@ function PosPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("order_refunds")
-        .select("amount, method_key, items_payload")
+        .select("amount, method_key, items_payload, is_cancellation")
         .eq("shift_id", shift.data!.id)
         .eq("status", "active");
       if (error) throw error;
-      const rows = data ?? [];
-      let total = 0;
-      let cash = 0;
-      let waste = 0;
-      for (const row of rows) {
-        total += Number(row.amount);
-        if ((row.method_key ?? "cash") === "cash") cash += Number(row.amount);
-        for (const entry of (row.items_payload ?? []) as Array<{
-          disposition?: string;
-          quantity?: number;
-          unit_cost?: number | string;
-        }>) {
-          if (entry.disposition === "waste") {
-            waste += Number(entry.unit_cost ?? 0) * Number(entry.quantity ?? 0);
-          }
-        }
-      }
-      return { total, cash, waste, count: rows.length };
+      // Cancelled items are not refunds: they never count as drawer money back.
+      return splitRefundStats(
+        (data ?? []).map((row) => ({ ...row, items_payload: row.items_payload as never })),
+      );
     },
   });
 
@@ -2841,7 +2828,7 @@ function PosPage() {
                 lang={lang === "ar" ? "ar" : "en"}
               />
             )}
-            {shiftRefunds.data && shiftRefunds.data.count > 0 && (
+            {shiftRefunds.data && shiftRefunds.data.count + shiftRefunds.data.cancelCount > 0 && (
               <CollapsibleSection
                 title={lang === "ar" ? "مرتجعات وهالك الوردية" : "Shift refunds & waste"}
                 icon={<CircleAlert className="size-4" />}
@@ -2855,6 +2842,16 @@ function PosPage() {
                   label={t("pos.cashRefunds")}
                   value={formatMoney(shiftRefunds.data.cash, currency, lang)}
                 />
+                {shiftRefunds.data.cancelCount > 0 && (
+                  <Row
+                    label={
+                      lang === "ar"
+                        ? `أصناف ملغية (${shiftRefunds.data.cancelCount}) · مش مرتجع ومش من الدرج`
+                        : `Cancelled items (${shiftRefunds.data.cancelCount}) · not refunds, not drawer money`
+                    }
+                    value={formatMoney(shiftRefunds.data.cancelTotal, currency, lang)}
+                  />
+                )}
                 {/* Waste is valued at cost: the cashier sees selling prices only. */}
                 {!cashierOnly && (
                   <Row

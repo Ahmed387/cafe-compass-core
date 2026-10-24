@@ -29,6 +29,7 @@ import { formatDateTime, formatMoney } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { invoiceSequence } from "@/lib/receipt";
 import { businessToday } from "@/core/finance/business-dates";
+import { PartnerTabsDueCard } from "@/modules/finance/PartnerTabsDueCard";
 
 export const Route = createFileRoute("/_authenticated/partner-tabs")({
   head: () => ({
@@ -58,6 +59,7 @@ type Item = {
 type Row = {
   id: string;
   total_amount: number;
+  settled_amount: number | null;
   is_settled: boolean;
   settled_at: string | null;
   created_at: string;
@@ -85,7 +87,7 @@ function PartnerTabsPage() {
       const { data, error } = await supabase
         .from("partner_tab_orders")
         .select(
-          "id, total_amount, is_settled, settled_at, created_at, partners(id, name), user_profiles!partner_tab_orders_created_by_fkey(display_name), orders(id, order_number, order_items(product_name, size_name, quantity, unit_price, line_total, status))",
+          "id, total_amount, settled_amount, is_settled, settled_at, created_at, partners(id, name), user_profiles!partner_tab_orders_created_by_fkey(display_name), orders(id, order_number, order_items(product_name, size_name, quantity, unit_price, line_total, status))",
         )
         .order("created_at", { ascending: false })
         .limit(2000);
@@ -113,17 +115,19 @@ function PartnerTabsPage() {
 
   if (tabs.isError) return <NoPermission message={t("common.noAccess")} />;
 
-  const sum = (list: Row[]) => list.reduce((s, r) => s + Number(r.total_amount), 0);
-  const pendingTotal = sum(rows.filter((r) => !r.is_settled));
-  const settledTotal = sum(rows.filter((r) => r.is_settled));
+  // A tab can be settled in parts: what is open is total minus what was settled so far.
+  const paidOf = (r: Row) => (r.is_settled ? Number(r.total_amount) : Math.min(Number(r.settled_amount ?? 0), Number(r.total_amount)));
+  const openOf = (r: Row) => Number(r.total_amount) - paidOf(r);
+  const pendingTotal = rows.reduce((s, r) => s + openOf(r), 0);
+  const settledTotal = rows.reduce((s, r) => s + paidOf(r), 0);
 
   const byPartner = new Map<string, { name: string; count: number; pending: number; settled: number }>();
   for (const r of rows) {
     if (!r.partners) continue;
     const c = byPartner.get(r.partners.id) ?? { name: r.partners.name, count: 0, pending: 0, settled: 0 };
     c.count += 1;
-    if (r.is_settled) c.settled += Number(r.total_amount);
-    else c.pending += Number(r.total_amount);
+    c.settled += paidOf(r);
+    c.pending += openOf(r);
     byPartner.set(r.partners.id, c);
   }
 
@@ -171,6 +175,7 @@ function PartnerTabsPage() {
             : "All partner orders charged by the cashier — deducted automatically at the next profit distribution."
         }
       />
+      <PartnerTabsDueCard />
 
       <div className="mb-5 grid gap-3 sm:grid-cols-4">
         <Kpi label={ar ? "عدد الفواتير" : "Invoices"} value={String(rows.length)} />
