@@ -9,6 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { formatMoney, formatPercent, friendlyError } from "@/lib/format";
+import type { MonthPayout } from "@/core/finance/payout-months";
+import type { PayoutRecord } from "@/modules/finance/finance-queries";
+import { PartnerPayoutMonths } from "@/modules/finance/PayoutMonths";
 
 export type FlowPartner = {
   id: string;
@@ -29,12 +32,16 @@ export function PartnerMoneyFlowCards({
   lang,
   isSuper,
   openNetProfit,
+  months = [],
+  payouts = [],
 }: {
   partners: FlowPartner[];
   currency: string;
   lang: "ar" | "en";
   isSuper: boolean;
   openNetProfit: number | undefined;
+  months?: MonthPayout[];
+  payouts?: PayoutRecord[];
 }) {
   const ar = lang === "ar";
   const money = (v: number) => formatMoney(v, currency, lang);
@@ -113,6 +120,8 @@ export function PartnerMoneyFlowCards({
                 tone={p.balance < 0 ? "bad" : "good"}
               />
             </dl>
+
+            <PartnerPayoutMonths partnerId={p.id} months={months} payouts={payouts} money={(v) => money(Number(v ?? 0))} lang={lang} />
 
             {isSuper && p.is_managing_staff && <SalaryTypeEditor partner={p} lang={lang} />}
           </article>

@@ -207,6 +207,8 @@ export function useUnpaidProfit(enabled = true) {
     to,
     amount,
     pnl,
+    history,
+    plan,
     sinceLastPayout: Boolean(history.data?.payouts.some((p) => p.status === "active")),
   };
 }
