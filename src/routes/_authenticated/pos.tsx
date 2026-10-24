@@ -193,6 +193,9 @@ function PosPage() {
   const [categoryId, setCategoryId] = useState<string>("all");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway" | "delivery">("dine_in");
+  // Dine-in only and required there; hidden for takeaway and delivery.
+  const [tableNumber, setTableNumber] = useState("");
+  const tableMissing = orderType === "dine_in" && !tableNumber.trim();
   const [discount, setDiscount] = useState("");
   const [discountReason, setDiscountReason] = useState("");
   const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
@@ -741,6 +744,7 @@ function PosPage() {
     setPartnerId("");
     setPartnerMode("paid");
     setOrderType("dine_in");
+    setTableNumber("");
   }
 
   function addLine(line: Omit<CartLine, "key" | "quantity">) {
@@ -1187,8 +1191,9 @@ function PosPage() {
         if (!payBalanced) throw new Error("Payments must match the order total");
         if (cashbackOver) throw new Error(lang === "ar" ? "الكاش باك المستخدم أكبر من رصيد العميل" : "Cashback used exceeds the customer's wallet");
       }
+      if (tableMissing) throw new Error(t("pos.tableRequired"));
       const payments = toServerPayments(payRows, (key) => methodByKey(key)?.id ?? null);
-      const { data, error } = await supabase.rpc("create_pos_order", {
+      const { data, error } = await supabase.rpc("create_pos_order_with_table", {
         _branch_id: currentBranchId!,
         _items: cart.map((line) => ({
           custom: Boolean(line.custom),
@@ -1206,6 +1211,7 @@ function PosPage() {
         })),
         _payments: onPartnerTab ? [] : payments,
         _order_type: orderType,
+        ...(orderType === "dine_in" ? { _table_number: tableNumber.trim().slice(0, 20) } : {}),
         _discount_amount: totals.manualDiscount,
         ...(orderNote.trim() ? { _notes: orderNote.trim().slice(0, 500) } : {}),
         ...(discountReason ? { _discount_reason: discountReason } : {}),
@@ -1238,7 +1244,7 @@ function PosPage() {
         const { data: orderRows } = await supabase
           .from("orders")
           .select(
-            "id, order_number, order_type, created_at, subtotal, discount_amount, tax_amount, total, customer_name, customer_phone, notes, order_items(id, product_name, size_name, unit_price, quantity, line_total, status, notes, order_item_modifiers(name)), order_payments(method_key, payment_methods(key, name, kind), amount, reference)",
+            "id, order_number, order_type, table_number, created_at, subtotal, discount_amount, tax_amount, total, customer_name, customer_phone, notes, order_items(id, product_name, size_name, unit_price, quantity, line_total, status, notes, order_item_modifiers(name)), order_payments(method_key, payment_methods(key, name, kind), amount, reference)",
           )
           .eq("id", createdOrder.id)
           .single();
@@ -1252,6 +1258,7 @@ function PosPage() {
             id: string;
             order_number: string;
             order_type: string;
+            table_number: string | null;
             created_at: string;
             subtotal: number;
             discount_amount: number;
@@ -1299,6 +1306,7 @@ function PosPage() {
                 string,
                 string
               >)[order.order_type] ?? order.order_type,
+            tableNumber: order.table_number,
             cashier: cashierName,
             lines: order.order_items.map((it) => ({
               product_name: it.product_name,
@@ -1350,6 +1358,7 @@ function PosPage() {
               orderNumber: order.order_number,
               createdAt: order.created_at,
               orderType: receiptData.orderType,
+              tableNumber: order.table_number,
               customerName: order.customer_name,
               notes: order.notes,
               lines: cart.map((line) => ({
@@ -1366,6 +1375,7 @@ function PosPage() {
                 order: t("receipt.order"),
                 customer: t("receipt.customer"),
                 kitchenHint: t("receipt.kitchenHint"),
+                table: t("receipt.table"),
               },
             });
           }
@@ -1849,16 +1859,31 @@ function PosPage() {
                 <ShoppingCart className="size-4 shrink-0 text-primary" />
                 <span className="truncate">{t("pos.cart")}</span>
               </CardTitle>
-              <Select value={orderType} onValueChange={(v) => setOrderType(v as typeof orderType)}>
-                <SelectTrigger className="h-8 w-32 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="dine_in">{t("pos.dineIn")}</SelectItem>
-                  <SelectItem value="takeaway">{t("pos.takeaway")}</SelectItem>
-                  <SelectItem value="delivery">{t("pos.delivery")}</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Select value={orderType} onValueChange={(v) => setOrderType(v as typeof orderType)}>
+                  <SelectTrigger className="h-8 w-28 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dine_in">{t("pos.dineIn")}</SelectItem>
+                    <SelectItem value="takeaway">{t("pos.takeaway")}</SelectItem>
+                    <SelectItem value="delivery">{t("pos.delivery")}</SelectItem>
+                  </SelectContent>
+                </Select>
+                {orderType === "dine_in" && (
+                  <Input
+                    value={tableNumber}
+                    onChange={(e) => setTableNumber(e.target.value.slice(0, 20))}
+                    placeholder={t("receipt.table")}
+                    aria-label={t("pos.tableNumber")}
+                    aria-invalid={tableMissing && cart.length > 0}
+                    inputMode="numeric"
+                    className={`h-8 w-20 text-center text-sm font-bold ${
+                      tableMissing && cart.length > 0 ? "border-destructive" : ""
+                    }`}
+                  />
+                )}
+              </div>
             </CardHeader>
             <CardContent className="flex min-h-0 flex-1 flex-col p-0">
               <div className="shrink-0 border-b px-2 py-1.5">
@@ -2322,7 +2347,8 @@ function PosPage() {
                     cart.length === 0 ||
                     !can("pos.create_order") ||
                     startPayment.isPending ||
-                    (!customerName.trim() && !customer && !partnerId)
+                    (!customerName.trim() && !customer && !partnerId) ||
+                    tableMissing
                   }
 
                   onClick={() => startPayment.mutate()}
@@ -2334,6 +2360,11 @@ function PosPage() {
                     {lang === "ar"
                       ? "اكتب اسم الزبون قبل الدفع"
                       : "Enter the customer name before paying"}
+                  </p>
+                )}
+                {tableMissing && cart.length > 0 && (
+                  <p className="text-center text-xs font-medium text-destructive">
+                    {lang === "ar" ? "اكتب رقم الترابيزة قبل الدفع" : "Enter the table number before paying"}
                   </p>
                 )}
                 {lastOrder && (

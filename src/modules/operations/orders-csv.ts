@@ -5,6 +5,7 @@ type ExportOrder = {
   order_number: string;
   created_at: string;
   shift_id: string | null;
+  table_number?: string | null;
   status: string;
   subtotal: number | string;
   total: number | string;
@@ -22,6 +23,7 @@ export function exportOrdersCsv(rows: ExportOrder[]) {
       { header: "Invoice Number", value: (o) => o.order_number },
       { header: "Date & Time", value: (o) => o.created_at },
       { header: "Shift ID", value: (o) => o.shift_id },
+      { header: "Table", value: (o) => o.table_number ?? "" },
       {
         header: "Payment Method",
         value: (o) =>

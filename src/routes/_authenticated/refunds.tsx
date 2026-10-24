@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -27,13 +28,13 @@ import { isCancellation, splitRefundStats } from "@/core/finance/cancellations";
 export const Route = createFileRoute("/_authenticated/refunds")({
   head: () => ({
     meta: [
-      { title: "Refunds log — 20s Coffee" },
+      { title: "Refunds & cancellations — 20s Coffee" },
       {
         name: "description",
-        content: "Full customer refund and waste log for 20s Coffee: amounts, methods, reasons.",
+        content: "Customer refunds and cancellations for 20s Coffee: amounts, methods, reasons.",
       },
-      { property: "og:title", content: "Refunds log — 20s Coffee" },
-      { property: "og:description", content: "Every refund and waste record, searchable by invoice." },
+      { property: "og:title", content: "Refunds & cancellations — 20s Coffee" },
+      { property: "og:description", content: "Every refund, cancellation and waste record, searchable by invoice." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -64,6 +65,7 @@ type RefundRow = {
   orders: {
     shift_id: string | null;
     order_number: string | null;
+    table_number: string | null;
     customer_name: string | null;
     user_profiles: { display_name: string | null; first_name: string; last_name: string } | null;
   } | null;
@@ -84,6 +86,7 @@ function RefundsPage() {
   const [from, setFrom] = useState(isoDay(-29));
   const [to, setTo] = useState(isoDay(0));
   const [switching, setSwitching] = useState<string | null>(null);
+  const [view, setView] = useState<"all" | "refunds" | "cancellations">("all");
   const isSuperAdmin = Boolean(me?.roleNames?.includes("Super Admin"));
 
   // Same sequential drawer numbering as the orders screen, for reconciliation.
@@ -113,7 +116,7 @@ function RefundsPage() {
       let query = supabase
         .from("order_refunds")
         .select(
-          "id, created_at, kind, amount, tax_amount, method_key, reason, status, origin, is_cancellation, reclassify_note, items_payload, orders!inner(shift_id, order_number, customer_name, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name))",
+          "id, created_at, kind, amount, tax_amount, method_key, reason, status, origin, is_cancellation, reclassify_note, items_payload, orders!inner(shift_id, order_number, table_number, customer_name, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name))",
         )
         .eq("orders.branch_id", currentBranchId!)
         .gte("business_date", from)
@@ -132,6 +135,7 @@ function RefundsPage() {
             const parts = [
               `orders.order_number.ilike.%${safe}%`,
               `orders.customer_name.ilike.%${safe}%`,
+              `orders.table_number.eq.${safe}`,
               `orders.user_profiles.display_name.ilike.%${safe}%`,
               `orders.user_profiles.first_name.ilike.%${safe}%`,
             ];
@@ -154,11 +158,15 @@ function RefundsPage() {
     },
   });
 
-  const rows = (refunds.data ?? []).filter(
+  const inRange = (refunds.data ?? []).filter(
     (row) => !shiftNo || String(row.orders?.shift_id ? shiftNumbers.data?.[row.orders.shift_id] ?? "" : "") === shiftNo,
   );
   // Cancelled items are not refunds: counted apart (owner rule 2026-10-24).
-  const stats = splitRefundStats(rows);
+  const stats = splitRefundStats(inRange);
+  const rows =
+    view === "all" ? inRange : inRange.filter((row) => isCancellation(row) === (view === "cancellations"));
+  // Waste of the rows on screen, so each tab's waste card matches its list.
+  const viewWaste = splitRefundStats(rows).waste;
 
   if (!canView) return <NoPermission message={t("common.noAccess")} />;
 
@@ -170,13 +178,28 @@ function RefundsPage() {
   return (
     <div>
       <PageHeader
-        title={ar ? "سجل المرتجعات" : "Customer refunds"}
+        title={ar ? "المرتجعات والإلغاءات" : "Refunds & cancellations"}
         description={
           ar
-            ? "كل عمليات الاسترجاع والهالك مع المبلغ وطريقة الرد والسبب."
-            : "Every refund and waste record with amount, payout method and reason."
+            ? "المرتجع فلوس رجعت للعميل وبتتخصم من المبيعات. الإلغاء صنف أو طلب اتشال كأنه ماتباعش. الاتنين مع الهالك والسبب."
+            : "A refund is money given back and comes off sales. A cancellation is an item or order removed as if never sold. Both with waste and reason."
         }
       />
+
+      <Tabs value={view} onValueChange={(v) => setView(v as typeof view)} className="mb-4">
+        <TabsList>
+          <TabsTrigger value="all">
+            {ar ? "الكل" : "All"} <span className="ms-1.5 tabular-nums text-muted-foreground">{inRange.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="refunds">
+            {ar ? "المرتجعات" : "Refunds"} <span className="ms-1.5 tabular-nums text-muted-foreground">{stats.count}</span>
+          </TabsTrigger>
+          <TabsTrigger value="cancellations">
+            {ar ? "الإلغاءات" : "Cancellations"}{" "}
+            <span className="ms-1.5 tabular-nums text-muted-foreground">{stats.cancelCount}</span>
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="grid gap-1">
@@ -207,42 +230,37 @@ function RefundsPage() {
         </div>
       </div>
 
-      <div className="stagger mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">{ar ? "عدد المرتجعات" : "Refunds"}</p>
-          <p className="mt-1 text-xl font-bold tabular-nums">{stats.count}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">{t("orders.refundedTotal")}</p>
-          <p className="mt-1 text-xl font-bold tabular-nums">
-            {formatMoney(stats.total, currency, lang)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">{ar ? "مرتجعات كاش" : "Cash refunds"}</p>
-          <p className="mt-1 text-xl font-bold tabular-nums">
-            {formatMoney(stats.cash, currency, lang)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">{t("refunds.waste")}</p>
-          <p className="mt-1 text-xl font-bold tabular-nums">
-            {formatMoney(stats.waste, currency, lang)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-dashed border-border bg-card p-4">
-          <p className="text-xs text-muted-foreground">
-            {ar ? "أصناف ملغية بعد الدفع (مش مرتجع)" : "Cancelled after payment (not refunds)"}
-          </p>
-          <p className="mt-1 text-xl font-bold tabular-nums">
-            {formatMoney(stats.cancelTotal, currency, lang)}
-            <span className="ms-2 text-xs font-normal text-muted-foreground">× {stats.cancelCount}</span>
-          </p>
-        </div>
+      <div className="stagger mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {view !== "cancellations" && (
+          <>
+            <StatCard label={ar ? "عدد المرتجعات" : "Refunds"} value={String(stats.count)} />
+            <StatCard label={t("orders.refundedTotal")} value={formatMoney(stats.total, currency, lang)} />
+            <StatCard label={ar ? "مرتجعات كاش" : "Cash refunds"} value={formatMoney(stats.cash, currency, lang)} />
+          </>
+        )}
+        {view !== "refunds" && (
+          <>
+            <StatCard dashed label={ar ? "عدد الإلغاءات" : "Cancellations"} value={String(stats.cancelCount)} />
+            <StatCard
+              dashed
+              label={ar ? "مبلغ الإلغاءات (مش مرتجع)" : "Cancelled amount (not refunds)"}
+              value={formatMoney(stats.cancelTotal, currency, lang)}
+            />
+          </>
+        )}
+        <StatCard label={t("refunds.waste")} value={formatMoney(viewWaste, currency, lang)} />
       </div>
 
       {rows.length === 0 ? (
-        <EmptyState message={ar ? "لا توجد مرتجعات في هذه الفترة." : "No refunds in this range."} />
+        <EmptyState
+          message={
+            view === "cancellations"
+              ? ar ? "مفيش إلغاءات في الفترة دي." : "No cancellations in this range."
+              : view === "refunds"
+                ? ar ? "مفيش مرتجعات في الفترة دي." : "No refunds in this range."
+                : ar ? "مفيش مرتجعات ولا إلغاءات في الفترة دي." : "No refunds or cancellations in this range."
+          }
+        />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border bg-card">
           <Table>
@@ -255,6 +273,7 @@ function RefundsPage() {
                 <TableHead className="w-24 whitespace-nowrap text-center">
                   {t("orders.shiftNo")}
                 </TableHead>
+                <TableHead className="w-20 whitespace-nowrap text-center">{t("orders.table")}</TableHead>
                 <TableHead className="min-w-48 text-start">
                   {ar ? "الأصناف" : "Items"}
                 </TableHead>
@@ -292,6 +311,9 @@ function RefundsPage() {
                       {row.orders?.shift_id
                         ? (shiftNumbers.data?.[row.orders.shift_id] ?? "—")
                         : "—"}
+                    </TableCell>
+                    <TableCell className="w-20 whitespace-nowrap text-center font-bold tabular-nums">
+                      {row.orders?.table_number || "—"}
                     </TableCell>
                     <TableCell className="min-w-48 max-w-72 text-xs text-muted-foreground">
                       {(row.items_payload ?? [])
@@ -347,6 +369,15 @@ function RefundsPage() {
         </div>
       )}
       <RefundReclassifyDialog refundId={switching} currency={currency} lang={lang} onClose={() => setSwitching(null)} />
+    </div>
+  );
+}
+
+function StatCard({ label, value, dashed }: { label: string; value: string; dashed?: boolean }) {
+  return (
+    <div className={`rounded-lg border border-border bg-card p-4 ${dashed ? "border-dashed" : ""}`}>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 text-xl font-bold tabular-nums">{value}</p>
     </div>
   );
 }

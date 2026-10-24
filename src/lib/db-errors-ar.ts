@@ -224,6 +224,10 @@ const DB_ERRORS_AR: Array<[string, string]> = [
   ["Order is already closed", "الفاتورة دي اتقفلت خلاص."],
   ["Order line not found", "البند ده مش موجود في الفاتورة."],
   ["Order not found", "الفاتورة مش موجودة."],
+  [
+    "Only a manager can change the table after the shift is closed",
+    "تعديل رقم الترابيزة بعد قفل الوردية للمدير بس.",
+  ],
   ["Order total must be positive", "إجمالي الفاتورة لازم يبقى أكبر من صفر."],
   ["Paid amount exceeds the purchase total", "المدفوع أكبر من إجمالي فاتورة الشراء."],
   [
@@ -330,6 +334,8 @@ const DB_ERRORS_AR: Array<[string, string]> = [
   ["Super Admin only", "للسوبر أدمن بس."],
   ["Super Admin role missing", "دور السوبر أدمن مش موجود."],
   ["Supplier name is required", "اكتب اسم المورد."],
+  ["Table number is only for dine-in orders", "رقم الترابيزة للطلبات الصالة بس."],
+  ["Table number is required", "اكتب رقم الترابيزة."],
   ["Supplier not found", "المورد مش موجود."],
   ["System roles cannot be deleted", "أدوار النظام مينفعش تتمسح."],
   ["Target and reward must be greater than zero", "التارجت والمكافأة لازم يبقوا أكبر من صفر."],
