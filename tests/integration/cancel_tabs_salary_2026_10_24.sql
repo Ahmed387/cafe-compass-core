@@ -260,6 +260,13 @@ BEGIN
     DELETE FROM public.order_refunds WHERE order_id = _o;
     PERFORM pg_temp.ok('12 refunds cannot be deleted', EXISTS (SELECT 1 FROM public.order_refunds WHERE order_id = _o));
   EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.ok('12 refunds cannot be deleted', true, SQLERRM); END;
+
+  -- 13. A new partner can be added (the share-snapshot trigger used to fail on INSERT).
+  BEGIN
+    _id := public.create_partner_entry('شريك تجربة', NULL, '01000000000', NULL);
+    UPDATE public.partners SET name = 'شريك تجربة ٢' WHERE id = _id;
+    PERFORM pg_temp.ok('13 add then rename a partner', (SELECT name = 'شريك تجربة ٢' FROM public.partners WHERE id = _id));
+  EXCEPTION WHEN OTHERS THEN PERFORM pg_temp.ok('13 add then rename a partner', false, SQLERRM); END;
 END $$;
 
 SELECT n, step, CASE WHEN ok THEN 'PASS' ELSE 'FAIL' END AS result, detail FROM _results ORDER BY n;
