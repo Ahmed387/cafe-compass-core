@@ -139,7 +139,7 @@ export function ProfitCenter() {
         <PayoutWizard
           open={wizardOpen}
           onOpenChange={setWizardOpen}
-          defaultFrom={nextUnpaidDay(history.data?.payouts)}
+          defaultFrom={nextUnpaidDay(history.data?.payouts, history.data?.first_business_day)}
           currency={currency}
           lang={lang}
         />

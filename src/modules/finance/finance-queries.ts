@@ -158,25 +158,25 @@ export function usePayoutHistory(enabled = true) {
     queryFn: async () => {
       const { data, error } = await supabase.rpc("payout_history", { _limit: 24 });
       if (error) throw error;
-      return data as unknown as { payouts: PayoutRecord[]; development_fund_balance: number };
+      return data as unknown as { payouts: PayoutRecord[]; development_fund_balance: number; first_business_day?: string | null };
     },
   });
 }
 
-/** Day after the last active payout, or the start of this month when nothing was paid yet. */
-export function nextUnpaidDay(history: PayoutRecord[] | undefined): string {
+/** Day after the last active payout, or the first business day when nothing was paid yet. */
+export function nextUnpaidDay(history: PayoutRecord[] | undefined, firstBusinessDay?: string | null): string {
   const lastTo = (history ?? [])
     .filter((p) => p.status === "active" && p.to)
     .map((p) => p.to as string)
     .sort()
     .at(-1);
-  return lastTo ? addDays(lastTo, 1) : monthToDate().start;
+  return lastTo ? addDays(lastTo, 1) : firstBusinessDay ?? monthToDate().start;
 }
 
 /** Net profit earned since the last payout (what is waiting to be distributed). */
 export function useUnpaidProfit(enabled = true) {
   const history = usePayoutHistory(enabled);
-  const from = nextUnpaidDay(history.data?.payouts);
+  const from = nextUnpaidDay(history.data?.payouts, history.data?.first_business_day);
   const to = businessToday();
   const pnl = useRangePnl(from, to, enabled && history.isSuccess && from <= to);
   return { from, to, pnl, sinceLastPayout: Boolean(history.data?.payouts.some((p) => p.status === "active")) };

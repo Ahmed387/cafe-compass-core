@@ -290,7 +290,7 @@ function PartnersPage() {
         <KpiCard
           label={lang === "ar" ? "صافي الأرباح القابلة للتوزيع" : "Distributable net profit"}
           value={distributable.data === undefined ? "—" : formatMoney(distributable.data, currency, lang)}
-          hint={unpaid.sinceLastPayout ? (lang === "ar" ? `من ${unpaid.from} (بعد آخر توزيع)` : `Since ${unpaid.from} (after last payout)`) : (lang === "ar" ? "من أول الشهر" : "Month to date")}
+          hint={unpaid.sinceLastPayout ? (lang === "ar" ? `من ${unpaid.from} (بعد آخر توزيع)` : `Since ${unpaid.from} (after last payout)`) : (lang === "ar" ? `من ${unpaid.from} (مفيش توزيع لسه)` : `Since ${unpaid.from} (nothing paid out yet)`)}
           tone={(distributable.data ?? 0) < 0 ? "bad" : "good"}
           formula={lang === "ar" ? "صافي الربح من بعد آخر توزيع لحد النهارده — نفس رقم قائمة الدخل بالظبط." : "Net profit from the day after the last payout until today — the exact P&L figure."}
         />
