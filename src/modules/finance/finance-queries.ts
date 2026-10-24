@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { addDays, businessToday, monthToDate } from "@/core/finance/business-dates";
+import { nextPayoutRange, payoutMonths } from "@/core/finance/payout-months";
 import { supabase } from "@/integrations/supabase/client";
 
 /** Shape returned by the `range_pnl` database function (the single P&L source of truth). */
@@ -151,6 +152,22 @@ export function useSustainability(enabled = true) {
   });
 }
 
+export type PayoutMonthFigures = {
+  month: string;
+  start: string;
+  end: string;
+  revenue: number;
+  net_profit: number;
+  payroll: number;
+};
+
+export type PayoutHistoryData = {
+  payouts: PayoutRecord[];
+  development_fund_balance: number;
+  first_business_day?: string | null;
+  months?: PayoutMonthFigures[];
+};
+
 export function usePayoutHistory(enabled = true) {
   return useQuery({
     queryKey: ["payout-history"],
@@ -158,26 +175,38 @@ export function usePayoutHistory(enabled = true) {
     queryFn: async () => {
       const { data, error } = await supabase.rpc("payout_history", { _limit: 24 });
       if (error) throw error;
-      return data as unknown as { payouts: PayoutRecord[]; development_fund_balance: number };
+      return data as unknown as PayoutHistoryData;
     },
   });
 }
 
-/** Day after the last active payout, or the start of this month when nothing was paid yet. */
-export function nextUnpaidDay(history: PayoutRecord[] | undefined): string {
-  const lastTo = (history ?? [])
-    .filter((p) => p.status === "active" && p.to)
-    .map((p) => p.to as string)
-    .sort()
-    .at(-1);
-  return lastTo ? addDays(lastTo, 1) : monthToDate().start;
+/** Months from the first business day, and where the next payout starts (earliest unpaid month). */
+export function payoutPlan(data: PayoutHistoryData | undefined, today = businessToday()) {
+  const first = data?.first_business_day ?? monthToDate().start;
+  const payouts = data?.payouts ?? [];
+  const months = payoutMonths(first, today, payouts);
+  const next = nextPayoutRange(months, today, payouts);
+  return { first, months, next };
 }
 
-/** Net profit earned since the last payout (what is waiting to be distributed). */
+/**
+ * Net profit not paid out yet: everything since the first business day minus
+ * what the active payouts cover (their figure now, so later edits count).
+ */
 export function useUnpaidProfit(enabled = true) {
   const history = usePayoutHistory(enabled);
-  const from = nextUnpaidDay(history.data?.payouts);
   const to = businessToday();
-  const pnl = useRangePnl(from, to, enabled && history.isSuccess && from <= to);
-  return { from, to, pnl, sinceLastPayout: Boolean(history.data?.payouts.some((p) => p.status === "active")) };
+  const plan = payoutPlan(history.data, to);
+  const pnl = useRangePnl(plan.first, to, enabled && history.isSuccess && plan.first <= to);
+  const paid = (history.data?.payouts ?? [])
+    .filter((p) => p.status === "active")
+    .reduce((s, p) => s + Number(p.net_profit_now ?? p.net_profit_at_payout ?? 0), 0);
+  const amount = pnl.data ? Math.round((Number(pnl.data.net_profit) - paid) * 100) / 100 : undefined;
+  return {
+    from: plan.next?.from ?? addDays(to, 1),
+    to,
+    amount,
+    pnl,
+    sinceLastPayout: Boolean(history.data?.payouts.some((p) => p.status === "active")),
+  };
 }

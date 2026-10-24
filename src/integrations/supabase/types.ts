@@ -5845,18 +5845,21 @@ export type Database = {
       partner_balances: {
         Row: {
           balance: number | null
+          capital: number | null
           company_id: string | null
           name: string | null
           partner_id: string | null
         }
         Insert: {
           balance?: never
+          capital?: never
           company_id?: string | null
           name?: string | null
           partner_id?: string | null
         }
         Update: {
           balance?: never
+          capital?: never
           company_id?: string | null
           name?: string | null
           partner_id?: string | null

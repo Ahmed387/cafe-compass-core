@@ -1005,7 +1005,7 @@ export const dict: Dict = {
   },
 
   "partners.addCapital": { en: "Record contribution", ar: "تسجيل مساهمة" },
-  "partners.balance": { en: "Ledger balance", ar: "رصيد الحساب" },
+  "partners.balance": { en: "Available profit balance", ar: "رصيد الأرباح المتاح" },
   "partners.ledger": { en: "Ledger", ar: "سجل الحساب" },
   "partners.derived": {
     en: "Profit shares can be set directly or derived from capital; balances remain transaction-derived.",

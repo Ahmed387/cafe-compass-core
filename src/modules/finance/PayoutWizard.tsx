@@ -45,12 +45,15 @@ export function PayoutWizard({
   open,
   onOpenChange,
   defaultFrom,
+  defaultTo,
   currency,
   lang,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultFrom: string;
+  /** Last day of the suggested range (the end of the earliest unpaid month). */
+  defaultTo?: string | undefined;
   currency: string;
   lang: Lang;
 }) {
@@ -61,7 +64,8 @@ export function PayoutWizard({
 
   const [step, setStep] = useState(1);
   const [from, setFrom] = useState(defaultFrom);
-  const [to, setTo] = useState(yesterday < defaultFrom ? businessToday() : yesterday);
+  const suggestedTo = defaultTo ?? (yesterday < defaultFrom ? businessToday() : yesterday);
+  const [to, setTo] = useState(suggestedTo);
   const [fundOn, setFundOn] = useState(false);
   const [fundText, setFundText] = useState("0");
   const [notes, setNotes] = useState("");
@@ -70,11 +74,11 @@ export function PayoutWizard({
     if (!open) return;
     setStep(1);
     setFrom(defaultFrom);
-    setTo(yesterday < defaultFrom ? businessToday() : yesterday);
+    setTo(suggestedTo);
     setFundOn(false);
     setFundText("0");
     setNotes("");
-  }, [open, defaultFrom, yesterday]);
+  }, [open, defaultFrom, suggestedTo]);
 
   const fund = fundOn ? Math.max(Number(fundText) || 0, 0) : 0;
   const debouncedFund = useDebounced(fund);

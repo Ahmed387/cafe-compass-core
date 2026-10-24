@@ -10,6 +10,7 @@ import {
   profitMonthOptions,
 } from "../../src/core/finance/salary-month.ts";
 import { businessTime, shiftCloseLabel } from "../../src/core/finance/business-dates.ts";
+import { orderTenderNet } from "../../src/core/finance/formulas.ts";
 
 // --- Cancelled items are not refunds -------------------------------------
 
@@ -177,4 +178,59 @@ test("without a business day the close day is used", () => {
   const close = shiftCloseLabel(null, "2026-10-24T06:59:00Z", "en");
   assert.equal(close.nextDay, false);
   assert.ok(close.label.includes("24 Oct 2026"));
+});
+
+// --- Payment-method cards add up to revenue (mirrors SQL _tender_net) -----
+
+test("a paid invoice whose items were all removed leaves nothing on cash", () => {
+  // 261024-0001: 115 cash, both lines removed, 85 + 30 handed back.
+  const net = orderTenderNet({
+    order_payments: [{ method_key: "cash", amount: 115 }],
+    order_refunds: [
+      { method_key: "cash", amount: 85, status: "active" },
+      { method_key: "cash", amount: 30, status: "active" },
+    ],
+  });
+  assert.deepEqual(net, { cash: 0 });
+});
+
+test("paid by card and refunded in cash: card keeps it, cash goes down", () => {
+  // 20S-260927-0008: 65 by card, 65 back in cash from the drawer.
+  const net = orderTenderNet({
+    order_payments: [{ method_key: "card", amount: 65 }],
+    order_refunds: [{ method_key: "cash", amount: 65, status: "active" }],
+  });
+  assert.deepEqual(net, { visa: 65, cash: -65 });
+  assert.equal(
+    Object.values(net).reduce((a, b) => a + b, 0),
+    0,
+    "the invoice nets to its revenue: 0",
+  );
+});
+
+test("a partner-tab invoice shows on the partner card; its removed item is not taken off twice", () => {
+  const net = orderTenderNet({
+    order_payments: [],
+    order_refunds: [{ method_key: "partner_tab", amount: 120, status: "active" }],
+    partner_tab_orders: [{ total_amount: 0 }],
+  });
+  assert.deepEqual(net, { partner_tab: 0 });
+  assert.deepEqual(orderTenderNet({ partner_tab_orders: { total_amount: 65 } }), {
+    partner_tab: 65,
+  });
+});
+
+test("split payments, reversed refunds and points", () => {
+  const net = orderTenderNet({
+    order_payments: [
+      { method_key: "cash", amount: 50 },
+      { method_key: "instapay", amount: 100 },
+      { method_key: "points", amount: 10 },
+    ],
+    order_refunds: [
+      { method_key: "instapay", amount: 40, status: "active" },
+      { method_key: "cash", amount: 50, status: "reversed" },
+    ],
+  });
+  assert.deepEqual(net, { cash: 50, instapay: 60 });
 });

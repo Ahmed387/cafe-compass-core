@@ -365,6 +365,11 @@ export function TreasuryPage() {
             <p className="text-2xl font-semibold tabular-nums">
               {formatMoney(overview.data?.open_drawers ?? 0, currency, lang)}
             </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {ar
+                ? "المفروض يكون في الدرج دلوقتي: الفكة + الكاش اللي دخل − المرتجع كاش − مصروفات الدرج."
+                : "Should be in the drawer now: float + cash in − cash refunds − drawer expenses."}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -508,7 +513,7 @@ export function TreasuryPage() {
               { label: ar ? "الرواتب" : "Payroll", value: cost?.payroll ?? 0 },
               { label: ar ? "المصاريف" : "Expenses", value: cost?.expenses ?? 0 },
               {
-                label: ar ? "إجمالي التشغيل" : "Total operating",
+                label: ar ? "إجمالي التكاليف (خامات + هالك + رواتب + مصاريف)" : "Total costs (COGS + waste + payroll + expenses)",
                 value: cost?.operating_total ?? 0,
               },
               { label: ar ? "مشتريات الفترة" : "Purchases", value: cost?.purchases_total ?? 0 },

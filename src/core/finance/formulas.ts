@@ -63,3 +63,31 @@ export function netInvoiceTotal(
   if (order.status === "cancelled") return 0;
   return Math.max(0, round2(n(order.total) - saleRefundTotal(refunds)));
 }
+
+/**
+ * What one invoice leaves on each payment method — mirrors SQL _tender_net:
+ * paid with the method − money handed back with it (removed item, cancelled
+ * order or refund); partner tab = what is charged to the partner (the tab
+ * already shrinks when an item is removed). Summed over invoices it equals
+ * net revenue, so the payment cards add up to the revenue card.
+ */
+export function orderTenderNet(order: {
+  order_payments?: Array<{ method_key: string | null; amount: number | string }> | null;
+  order_refunds?: Array<{ method_key?: string | null; amount: number | string; status?: string | null }> | null;
+  partner_tab_orders?: Array<{ total_amount: number | string }> | { total_amount: number | string } | null;
+}): Partial<Record<TenderKey, number>> {
+  const out: Partial<Record<TenderKey, number>> = {};
+  const add = (key: TenderKey | "points", value: number) => {
+    if (key === "points") return;
+    out[key] = round2((out[key] ?? 0) + value);
+  };
+  for (const p of order.order_payments ?? []) add(normalizeTender(p.method_key), n(p.amount));
+  for (const r of order.order_refunds ?? []) {
+    if ((r.status ?? "active") !== "active") continue;
+    const key = normalizeTender(r.method_key);
+    if (key !== "partner_tab") add(key, -n(r.amount));
+  }
+  const tabs = order.partner_tab_orders;
+  for (const t of Array.isArray(tabs) ? tabs : tabs ? [tabs] : []) add("partner_tab", n(t.total_amount));
+  return out;
+}

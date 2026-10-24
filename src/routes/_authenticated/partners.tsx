@@ -115,7 +115,7 @@ function PartnersPage() {
         supabase
           .from("partner_ownership")
           .select("partner_id, total_contributions, ownership_percentage, open_loans"),
-        supabase.from("partner_balances").select("partner_id, balance"),
+        supabase.from("partner_balances").select("partner_id, balance, capital"),
         supabase
           .from("partner_capital_contributions")
           .select("id, partner_id, amount, contribution_date, reference, kind, effective_from, repaid_amount")
@@ -199,7 +199,7 @@ function PartnersPage() {
 
   // Net profit earned since the last payout — what is waiting to be distributed.
   const unpaid = useUnpaidProfit(can("partners.view") && (can("reports.profit") || can("partners.view_profit")));
-  const distributable = { data: unpaid.pnl.data?.net_profit };
+  const distributable = { data: unpaid.amount };
 
   // Partners without the company-wide permission only ever see their own share.
   if (!can("partners.view")) return <PartnerDashboard />;
@@ -290,9 +290,9 @@ function PartnersPage() {
         <KpiCard
           label={lang === "ar" ? "صافي الأرباح القابلة للتوزيع" : "Distributable net profit"}
           value={distributable.data === undefined ? "—" : formatMoney(distributable.data, currency, lang)}
-          hint={unpaid.sinceLastPayout ? (lang === "ar" ? `من ${unpaid.from} (بعد آخر توزيع)` : `Since ${unpaid.from} (after last payout)`) : (lang === "ar" ? "من أول الشهر" : "Month to date")}
+          hint={unpaid.sinceLastPayout ? (lang === "ar" ? `كل الأيام اللي متوزعتش، أولها ${unpaid.from}` : `All days not paid out yet, from ${unpaid.from}`) : (lang === "ar" ? `من ${unpaid.from} (مفيش توزيع لسه)` : `Since ${unpaid.from} (nothing paid out yet)`)}
           tone={(distributable.data ?? 0) < 0 ? "bad" : "good"}
-          formula={lang === "ar" ? "صافي الربح من بعد آخر توزيع لحد النهارده — نفس رقم قائمة الدخل بالظبط." : "Net profit from the day after the last payout until today — the exact P&L figure."}
+          formula={lang === "ar" ? "صافي ربح كل الأيام اللي لسه متوزعتش من أول يوم شغل لحد النهارده (الشهور اللي اتوزعت مش داخلة) — من نفس قائمة الدخل." : "Net profit of every day not yet paid out, from the first business day to today (paid months excluded) — from the same P&L."}
         />
       </KpiGrid>
       {false && (
@@ -651,7 +651,11 @@ function PartnersPage() {
               0,
           ),
         })) as LiquidationPartner[]}
-        balance={Number(data?.balances.find((row) => row.partner_id === liquidationFor?.id)?.balance ?? 0)}
+        balance={(() => {
+          // Liquidation settles capital + balance.
+          const row = data?.balances.find((r) => r.partner_id === liquidationFor?.id);
+          return Number(row?.balance ?? 0) + Number(row?.capital ?? 0);
+        })()}
         currency={currency}
         lang={lang}
         onClose={() => setLiquidationFor(null)}

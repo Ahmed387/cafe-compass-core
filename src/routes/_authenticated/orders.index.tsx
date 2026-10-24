@@ -15,7 +15,7 @@ import { PendingShortagesAlert } from "@/modules/operations/PendingShortagesAler
 import { ShortageBearerCell } from "@/modules/operations/ShortageBearerCell";
 import { ShiftRefundBearersButton } from "@/modules/operations/ShiftRefundBearersButton";
 import { KpiCard, KpiDetailRows, KpiGrid } from "@/components/shared/KpiCard";
-import { emptyTenders, normalizeTender, type TenderKey, netInvoiceTotal, saleRefundTotal } from "@/core/finance/formulas";
+import { emptyTenders, orderTenderNet, type TenderKey, netInvoiceTotal, saleRefundTotal } from "@/core/finance/formulas";
 import { EditClosingCashButton } from "@/modules/operations/EditClosingCashButton";
 
 import { Badge } from "@/components/ui/badge";
@@ -159,7 +159,7 @@ function OrdersPage() {
     let query = supabase
       .from("orders")
       .select(
-        "id, order_number, order_type, status, subtotal, discount_amount, tax_amount, total, created_at, cancel_reason, customer_id, customer_name, customer_phone, notes, shift_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name)), order_payments(method_key, amount), order_refunds(amount, status, origin), partner_tab_orders(id, total_amount, is_settled)",
+        "id, order_number, order_type, status, subtotal, discount_amount, tax_amount, total, created_at, cancel_reason, customer_id, customer_name, customer_phone, notes, shift_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name)), order_payments(method_key, amount), order_refunds(amount, method_key, status, origin), partner_tab_orders(id, total_amount, is_settled)",
         { count: "exact" },
       )
       .eq("branch_id", branchId)
@@ -628,18 +628,19 @@ function OrdersPage() {
       })}
     />
   );
+  // Same rule as the card: what each invoice leaves on this method after money handed back.
   const paymentDetailRows = (key: TenderKey) => (
     <KpiDetailRows
       empty={ar ? "لا توجد عمليات بهذه الطريقة." : "No payments by this method."}
-      rows={detailOrders.flatMap((order) =>
-        (order.order_payments ?? [])
-          .filter((payment) => normalizeTender(payment.method_key) === key)
-          .map((payment) => ({
-            label: `#${invoiceSequence(order.order_number)}`,
-            hint: formatDateTime(order.created_at, lang),
-            value: formatMoney(Number(payment.amount), currency, lang),
-          })),
-      )}
+      rows={detailOrders.flatMap((order) => {
+        const net = orderTenderNet(order as Parameters<typeof orderTenderNet>[0])[key];
+        if (net === undefined) return [];
+        return [{
+          label: `#${invoiceSequence(order.order_number)}`,
+          hint: formatDateTime(order.created_at, lang),
+          value: formatMoney(net, currency, lang),
+        }];
+      })}
     />
   );
   const tenderLabels: Record<TenderKey, string> = {
@@ -730,8 +731,8 @@ function OrdersPage() {
                     label={tenderLabels[key]}
                     value={formatMoney(kpi?.tenders[key] ?? 0, currency, lang)}
                     hint={`${kpi?.tenderCounts[key] ?? 0} ${ar ? "عملية" : "txns"}`}
-                    formula={ar ? "مجموع المدفوعات المسجلة بهذه الطريقة." : "Sum of payments recorded using this method."}
-                    source={ar ? "المصدر: عمليات دفع الفواتير المطابقة للفلاتر." : "Source: payments on invoices matching the filters."}
+                    formula={ar ? "اللي اتدفع بالطريقة دي − اللي رجع للعميل بيها (صنف اتشال، أوردر اتلغى، أو مرتجع). حساب الشريك = اللي متسجل على الشريك. مجموع الكروت = صافي الإيراد." : "Paid with this method − money handed back with it (removed item, cancelled order or refund). Partner tab = what is charged to the partner. The cards add up to net revenue."}
+                    source={ar ? "المصدر: مدفوعات ومرتجعات الفواتير المطابقة للفلاتر وحسابات الشركاء." : "Source: payments, refunds and partner tabs of invoices matching the filters."}
                     details={paymentDetailRows(key)}
                   />
                 ))}

@@ -103,9 +103,13 @@ export function PartnerMoneyFlowCards({
               />
               <Metric
                 icon={p.balance < 0 ? <ArrowUpRight className="size-4" /> : <Wallet className="size-4" />}
-                label={ar ? "الرصيد الصافي المستحق" : "Net balance due"}
+                label={ar ? "رصيد الأرباح المتاح" : "Available profit balance"}
                 value={money(p.balance)}
-                hint={p.balance < 0 ? (ar ? "مدين للمكان" : "Owes the venue") : ar ? "مستحق للشريك" : "Owed to partner"}
+                hint={
+                  p.balance < 0
+                    ? ar ? "مدين للمكان" : "Owes the venue"
+                    : ar ? "أرباح موزعة − مسحوبات − خصم الحساب والسلف. رأس المال مش منه، بيرجع عند التصفية بس" : "Distributed profit − withdrawals − tab & advance deductions. Capital is not in it; it comes back only on liquidation"
+                }
                 tone={p.balance < 0 ? "bad" : "good"}
               />
             </dl>
