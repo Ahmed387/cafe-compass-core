@@ -61,7 +61,7 @@ export function PartnerStatementDialog({
     enabled: Boolean(partner),
     queryFn: async () => {
       if (!partner) return null;
-      const [ledger, tabs, roles, userRoles] = await Promise.all([
+      const [ledger, tabs, roles, userRoles, bal] = await Promise.all([
         supabase
           .from("partner_ledger_transactions")
           .select("id, transaction_type, amount, transaction_date, description, status")
@@ -70,29 +70,30 @@ export function PartnerStatementDialog({
           .limit(100),
         supabase
           .from("partner_tab_orders")
-          .select("id, order_id, total_amount, is_settled, created_at, orders(order_number)")
+          .select("id, order_id, total_amount, settled_amount, is_settled, created_at, orders(order_number)")
           .eq("partner_id", partner.id)
           .order("created_at", { ascending: false }),
         supabase.from("roles").select("id, name").order("name"),
         partner.user_id
           ? supabase.from("user_roles").select("role_id").eq("user_id", partner.user_id)
           : Promise.resolve({ data: [] as Array<{ role_id: string }> }),
+        supabase.from("partner_balances").select("balance").eq("partner_id", partner.id).maybeSingle(),
       ]);
       return {
         ledger: ledger.data ?? [],
         tabs: tabs.data ?? [],
         roles: roles.data ?? [],
         roleIds: (userRoles.data ?? []).map((row) => row.role_id),
+        balance: Number(bal.data?.balance ?? 0),
       };
     },
   });
 
-  const balance = (details.data?.ledger ?? [])
-    .filter((row) => row.status === "active")
-    .reduce((sum, row) => sum + Number(row.amount), 0);
+  // Same figure as the partners table: withdrawals subtract, capital is not in it.
+  const balance = details.data?.balance ?? 0;
   const pendingTab = (details.data?.tabs ?? [])
     .filter((row) => !row.is_settled)
-    .reduce((sum, row) => sum + Number(row.total_amount), 0);
+    .reduce((sum, row) => sum + Number(row.total_amount) - Number(row.settled_amount ?? 0), 0);
 
   const toggleRole = useMutation({
     mutationFn: async (roleId: string) => {

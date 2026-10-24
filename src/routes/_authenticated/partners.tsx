@@ -115,7 +115,7 @@ function PartnersPage() {
         supabase
           .from("partner_ownership")
           .select("partner_id, total_contributions, ownership_percentage, open_loans"),
-        supabase.from("partner_balances").select("partner_id, balance"),
+        supabase.from("partner_balances").select("partner_id, balance, capital"),
         supabase
           .from("partner_capital_contributions")
           .select("id, partner_id, amount, contribution_date, reference, kind, effective_from, repaid_amount")
@@ -651,7 +651,11 @@ function PartnersPage() {
               0,
           ),
         })) as LiquidationPartner[]}
-        balance={Number(data?.balances.find((row) => row.partner_id === liquidationFor?.id)?.balance ?? 0)}
+        balance={(() => {
+          // Liquidation settles capital + balance.
+          const row = data?.balances.find((r) => r.partner_id === liquidationFor?.id);
+          return Number(row?.balance ?? 0) + Number(row?.capital ?? 0);
+        })()}
         currency={currency}
         lang={lang}
         onClose={() => setLiquidationFor(null)}

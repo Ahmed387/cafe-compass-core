@@ -134,6 +134,7 @@ export function PartnerLiquidationDialog({
             <div className="rounded-lg border border-border bg-muted p-3">
               <p className="text-xs text-muted-foreground">{ar ? "الرصيد النهائي" : "Final balance"}</p>
               <p className="mt-1 text-xl font-bold tabular-nums">{formatMoney(balance, currency, lang)}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">{ar ? "رأس المال + رصيد الأرباح المتاح" : "Capital + available profit balance"}</p>
             </div>
             <div className="rounded-lg border border-border bg-muted p-3">
               <p className="text-xs text-muted-foreground">{ar ? "الحصة الحالية" : "Current equity"}</p>
