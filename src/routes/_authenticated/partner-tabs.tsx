@@ -64,7 +64,7 @@ type Row = {
   settled_at: string | null;
   created_at: string;
   partners: { id: string; name: string } | null;
-  orders: { id: string; order_number: string; order_items: Item[] } | null;
+  orders: { id: string; order_number: string; table_number: string | null; order_items: Item[] } | null;
   user_profiles: { display_name: string | null } | null;
 };
 
@@ -87,7 +87,7 @@ function PartnerTabsPage() {
       const { data, error } = await supabase
         .from("partner_tab_orders")
         .select(
-          "id, total_amount, settled_amount, is_settled, settled_at, created_at, partners(id, name), user_profiles!partner_tab_orders_created_by_fkey(display_name), orders(id, order_number, order_items(product_name, size_name, quantity, unit_price, line_total, status))",
+          "id, total_amount, settled_amount, is_settled, settled_at, created_at, partners(id, name), user_profiles!partner_tab_orders_created_by_fkey(display_name), orders(id, order_number, table_number, order_items(product_name, size_name, quantity, unit_price, line_total, status))",
         )
         .order("created_at", { ascending: false })
         .limit(2000);
@@ -264,6 +264,7 @@ function PartnerTabsPage() {
                   <TableHead className="w-10" />
                   <TableHead className="w-24 text-start">#</TableHead>
                   <TableHead className="w-44 text-center">{t("common.date")}</TableHead>
+                  <TableHead className="w-20 text-center">{t("orders.table")}</TableHead>
                   <TableHead className="min-w-36 text-start">{t("ptab.partner")}</TableHead>
                   <TableHead className="min-w-32 text-start">{ar ? "الكاشير" : "Cashier"}</TableHead>
                   <TableHead className="w-20 text-center">{ar ? "الأصناف" : "Items"}</TableHead>
@@ -293,6 +294,7 @@ function PartnerTabsPage() {
                         </button>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-center">{formatDateTime(r.created_at, lang)}</TableCell>
+                      <TableCell className="text-center font-bold tabular-nums">{r.orders?.table_number || "—"}</TableCell>
                       <TableCell className="font-medium">{r.partners?.name ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground">{r.user_profiles?.display_name ?? "—"}</TableCell>
                       <TableCell className="text-center tabular-nums">{items.reduce((s, i) => s + Number(i.quantity), 0)}</TableCell>

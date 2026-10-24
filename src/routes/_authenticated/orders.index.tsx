@@ -159,7 +159,7 @@ function OrdersPage() {
     let query = supabase
       .from("orders")
       .select(
-        "id, order_number, order_type, status, subtotal, discount_amount, tax_amount, total, created_at, cancel_reason, customer_id, customer_name, customer_phone, notes, shift_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name)), order_payments(method_key, amount), order_refunds(amount, method_key, status, origin), partner_tab_orders(id, total_amount, is_settled)",
+        "id, order_number, order_type, table_number, status, subtotal, discount_amount, tax_amount, total, created_at, cancel_reason, customer_id, customer_name, customer_phone, notes, shift_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name)), order_payments(method_key, amount), order_refunds(amount, method_key, status, origin), partner_tab_orders(id, total_amount, is_settled)",
         { count: "exact" },
       )
       .eq("branch_id", branchId)
@@ -197,7 +197,7 @@ function OrdersPage() {
     } else if (status !== "all") {
       query = query.eq("status", status as "completed");
     }
-    // Smart search: invoice number, customer, phone, cashier, items or a date (YYYY-MM-DD).
+    // Smart search: invoice number, table, customer, phone, cashier, items or a date (YYYY-MM-DD).
     const s = debouncedQ.trim();
     if (s) {
       const day = searchDay(s);
@@ -212,7 +212,7 @@ function OrdersPage() {
               .select("id")
               .eq("branch_id", branchId)
               .or(
-                `order_number.ilike.%${safe}%,customer_name.ilike.%${safe}%,customer_phone.ilike.%${safe}%`,
+                `order_number.ilike.%${safe}%,customer_name.ilike.%${safe}%,customer_phone.ilike.%${safe}%,table_number.eq.${safe}`,
               )
               .limit(500),
             supabase
@@ -340,7 +340,7 @@ function OrdersPage() {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, order_number, order_type, status, subtotal, discount_amount, tax_amount, total, created_at, customer_name, customer_phone, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name)), order_payments(method_key, amount)",
+          "id, order_number, order_type, table_number, status, subtotal, discount_amount, tax_amount, total, created_at, customer_name, customer_phone, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name)), order_payments(method_key, amount)",
         )
         .eq("id", search.orderId)
         .maybeSingle();
@@ -785,6 +785,9 @@ function OrdersPage() {
                     <TableHead className="w-28 whitespace-nowrap text-center">
                       {t("orders.type")}
                     </TableHead>
+                    <TableHead className="w-20 whitespace-nowrap text-center">
+                      {t("orders.table")}
+                    </TableHead>
                     <TableHead className="min-w-44 text-start">{t("orders.items")}</TableHead>
                     <TableHead className="w-32 whitespace-nowrap text-center">
                       {t("pos.method")}
@@ -863,6 +866,9 @@ function OrdersPage() {
                         </TableCell>
                         <TableCell className="w-28 whitespace-nowrap text-center">
                           {typeLabel(order.order_type)}
+                        </TableCell>
+                        <TableCell className="w-20 whitespace-nowrap text-center font-bold tabular-nums">
+                          {order.table_number || "—"}
                         </TableCell>
                         <TableCell className="min-w-44 max-w-64 text-start text-xs text-muted-foreground">
                           {order.order_items

@@ -17,6 +17,8 @@ export type ReceiptData = {
   orderNumber: string;
   createdAt: string;
   orderType: string;
+  /** Dine-in table, typed by the cashier; printed big under the invoice number. */
+  tableNumber?: string | null;
   cashier?: string | null;
   /** Cashier's note written when the invoice was created; printed under the items. */
   notes?: string | null;
@@ -48,6 +50,7 @@ export type BaristaTicketData = {
   orderNumber: string;
   createdAt: string;
   orderType: string;
+  tableNumber?: string | null;
   customerName?: string | null;
   notes?: string | null;
   lines: Array<{
@@ -182,6 +185,7 @@ export function buildReceiptHtml(data: ReceiptData) {
     <div class="branch">${escape(branch)}</div>
     <div class="double-divider"></div>
     <h1>${invoiceText}</h1>
+    ${data.tableNumber?.trim() ? `<div class="table-no">Table <bdi dir="auto">${escape(data.tableNumber.trim())}</bdi></div>` : ""}
     <div class="meta-grid">
       <div class="meta-item"><strong>Order type</strong><div class="meta-value">${escape(data.orderType)}</div></div>
       <div class="meta-item"><strong>Date &amp; time</strong><div class="meta-value">${escape(formatReceiptDate(data.createdAt, lang))}</div></div>
@@ -232,6 +236,7 @@ export function buildReceiptHtml(data: ReceiptData) {
   .copy-label { margin-bottom: 5px; padding: 3px 4px; border: 1px solid #000; text-align: center; font-size: 11px; font-weight: 800; }
   .brand { text-align: center; font-size: 19px; font-weight: 900; }
   h1 { margin: 2px 0 6px; text-align: center; font-size: 18px; font-weight: 900; }
+  .table-no { margin: 0 auto 6px; padding: 3px 10px; width: fit-content; border: 2px solid #000; text-align: center; font-size: 17px; font-weight: 900; }
   .branch { margin: 1px 0 6px; text-align: center; font-size: 11px; font-weight: 600; }
   .double-divider { height: 4px; margin: 7px 0; border-top: 2px dashed #000; border-bottom: 1px dashed #000; }
   .section-title { margin: 7px 0 3px; font-size: 12px; font-weight: 800; }
@@ -370,6 +375,7 @@ export function buildBaristaTicketHtml(data: BaristaTicketData) {
   body { font-family: ui-monospace, "Courier New", monospace; width: 72mm; margin: 0 auto; color: #000; font-size: 14px; }
   h1 { font-size: 18px; text-align: center; margin: 0; }
   .sub { text-align: center; font-size: 12px; margin-bottom: 8px; opacity: .8; }
+  .table-no { text-align: center; font-size: 22px; font-weight: 900; border: 3px solid #000; padding: 4px; margin: 6px 0; }
   .type { text-align: center; font-size: 13px; font-weight: 700; border: 2px solid #000; padding: 4px; margin: 6px 0; }
   .item { border-bottom: 1px dashed #000; padding: 8px 0; }
   .bundle { border: 2px solid #000; padding: 4px 6px; margin: 6px 0; }
@@ -384,6 +390,7 @@ export function buildBaristaTicketHtml(data: BaristaTicketData) {
 <h1>${escape(data.companyName)}</h1>
 <div class="sub">${escape(data.branchName ?? "")}</div>
 <div class="type">${escape(data.orderType)} · ${escape(data.labels["order"] ?? "")} ${escape(data.orderNumber)}</div>
+${data.tableNumber?.trim() ? `<div class="table-no">${escape(data.labels["table"] ?? "Table")} ${escape(data.tableNumber.trim())}</div>` : ""}
 <div class="sub">${escape(formatDateTime(data.createdAt, data.lang))}</div>
 ${data.customerName ? `<div class="sub">${escape(data.labels["customer"] ?? "")}: ${escape(data.customerName)}</div>` : ""}
 ${data.notes ? `<div class="note">${escape(data.notes)}</div>` : ""}

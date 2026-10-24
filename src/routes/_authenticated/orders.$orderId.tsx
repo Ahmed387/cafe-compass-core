@@ -8,6 +8,7 @@ import { NoPermission, PageHeader } from "@/components/layout/AppShell";
 import { OrderCancelDialog } from "@/components/orders/OrderCancelDialog";
 import type { OrderDetails } from "@/components/orders/OrderDetailsDialog";
 import { OrderRefundDialog } from "@/components/orders/OrderRefundDialog";
+import { OrderTableField } from "@/components/orders/OrderTableField";
 import { useOrderShiftAccess } from "@/components/orders/useOrderShiftAccess";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,7 +66,7 @@ function OrderInvoicePage() {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, order_number, order_type, status, subtotal, discount_amount, discount_reason, tax_amount, total, created_at, completed_at, customer_id, customer_name, customer_phone, notes, shift_id, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name, price_delta)), order_payments(method_key, amount, reference), order_refunds(id, amount, wallet_amount, reason, method_key, created_at, status, origin, is_cancellation, items_payload), partner_tab_orders(id, total_amount, is_settled, partners(name))",
+          "id, order_number, order_type, table_number, status, subtotal, discount_amount, discount_reason, tax_amount, total, created_at, completed_at, customer_id, customer_name, customer_phone, notes, shift_id, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name, price_delta)), order_payments(method_key, amount, reference), order_refunds(id, amount, wallet_amount, reason, method_key, created_at, status, origin, is_cancellation, items_payload), partner_tab_orders(id, total_amount, is_settled, partners(name))",
         )
         .eq("id", orderId)
         .maybeSingle();
@@ -195,6 +196,17 @@ function OrderInvoicePage() {
             <div className="sm:col-span-2 rounded-md border border-dashed border-border p-2">
               <p className="text-xs text-muted-foreground">{t("common.notes")}</p>
               <p className="whitespace-pre-wrap font-medium" dir="auto">{row.notes}</p>
+            </div>
+          )}
+          {row.order_type === "dine_in" && (
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">{t("orders.table")}: </span>
+              <OrderTableField
+                orderId={row.id}
+                value={row.table_number}
+                shiftClosed={shiftClosed}
+                onSaved={() => void order.refetch()}
+              />
             </div>
           )}
           <p>

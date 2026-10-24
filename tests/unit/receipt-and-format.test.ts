@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { buildCsv } from "../../src/lib/csv.ts";
 import { friendlyError } from "../../src/lib/format.ts";
-import { buildReceiptHtml, invoiceSequence } from "../../src/lib/receipt.ts";
+import { buildBaristaTicketHtml, buildReceiptHtml, invoiceSequence } from "../../src/lib/receipt.ts";
 
 test("invoice number shows the daily sequence", () => {
   assert.equal(invoiceSequence("0007-221026"), "7");
@@ -41,6 +41,24 @@ test("customer text on the receipt cannot inject HTML", () => {
   const html = receipt({ customerName: "<script>alert(1)</script>", notes: "<img src=x onerror=1>" });
   assert.equal(html.includes("<script>alert(1)</script>"), false);
   assert.equal(html.includes("<img src=x"), false);
+});
+
+test("dine-in table prints on both receipt copies and the barista ticket", () => {
+  const html = receipt({ tableNumber: "12" });
+  assert.equal(html.split('class="table-no"').length - 1, 2);
+  assert.match(html, /Table <bdi dir="auto">12<\/bdi>/);
+  assert.equal(receipt().includes('class="table-no"'), false);
+  const ticket = buildBaristaTicketHtml({
+    companyName: "20s",
+    orderNumber: "0003-221026",
+    createdAt: "2026-10-22T18:00:00Z",
+    orderType: "Dine-in",
+    tableNumber: "<b>7</b>",
+    lines: [{ product_name: "Latte", quantity: 1 }],
+    lang: "ar",
+    labels: { table: "ترابيزة" },
+  });
+  assert.match(ticket, /ترابيزة &lt;b&gt;7&lt;\/b&gt;/);
 });
 
 test("CSV export quotes commas, quotes and new lines", () => {

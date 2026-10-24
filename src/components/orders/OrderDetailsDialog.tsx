@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Undo2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { OrderRefundDialog } from "@/components/orders/OrderRefundDialog";
+import { OrderTableField } from "@/components/orders/OrderTableField";
 import { PreparedDisposition, useDisposition } from "@/components/orders/PreparedDisposition";
 import { useOrderShiftAccess } from "@/components/orders/useOrderShiftAccess";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -29,6 +30,8 @@ export type OrderDetails = {
   id: string;
   order_number: string;
   order_type: string;
+  /** Dine-in table typed at the POS; empty on orders before 2026-10-24. */
+  table_number?: string | null;
   status: string;
   subtotal: number | string;
   discount_amount: number | string;
@@ -89,6 +92,9 @@ export function OrderDetailsDialog({
     setVoidLine(line);
   };
   const [refundOpen, setRefundOpen] = useState(false);
+  // Shown and reprinted at once after an edit, before the list refetches.
+  const [table, setTable] = useState<string | null>(order?.table_number ?? null);
+  useEffect(() => setTable(order?.table_number ?? null), [order?.id, order?.table_number]);
 
   const refunds = useQuery({
     queryKey: ["order-refunds", order?.id],
@@ -177,6 +183,7 @@ export function OrderDetailsDialog({
       orderNumber: order.order_number,
       createdAt: order.created_at,
       orderType: typeLabel(order.order_type),
+      tableNumber: order.order_type === "dine_in" ? table : null,
       cashier: cashierName || null,
       notes: order.notes ?? null,
       lines: order.order_items.map((item) => ({
@@ -231,7 +238,10 @@ export function OrderDetailsDialog({
             {order && (
               <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
                 <span>{formatDateTime(order.created_at, lang)}</span>
-                <span>{typeLabel(order.order_type)}</span>
+                <span>
+                  {typeLabel(order.order_type)}
+                  {order.order_type === "dine_in" && table ? ` · ${t("receipt.table")} ${table}` : ""}
+                </span>
               </div>
             )}
           </DialogHeader>
@@ -254,6 +264,12 @@ export function OrderDetailsDialog({
                       "—"}
                   </p>
                 </div>
+                {order.order_type === "dine_in" && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">{t("orders.table")}</p>
+                    <OrderTableField orderId={order.id} value={table} shiftClosed={shiftClosed} onSaved={setTable} />
+                  </div>
+                )}
                 {order.notes?.trim() && (
                   <div className="sm:col-span-2">
                     <p className="text-xs text-muted-foreground">{t("common.notes")}</p>

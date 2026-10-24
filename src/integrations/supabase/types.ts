@@ -2211,6 +2211,7 @@ export type Database = {
           shift_id: string | null
           status: Database["public"]["Enums"]["order_status"]
           subtotal: number
+          table_number: string | null
           tax_amount: number
           total: number
           updated_at: string
@@ -2238,6 +2239,7 @@ export type Database = {
           shift_id?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
+          table_number?: string | null
           tax_amount?: number
           total?: number
           updated_at?: string
@@ -2265,6 +2267,7 @@ export type Database = {
           shift_id?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
+          table_number?: string | null
           tax_amount?: number
           total?: number
           updated_at?: string
@@ -6271,6 +6274,28 @@ export type Database = {
           out_number: string
         }[]
       }
+      create_pos_order_with_table: {
+        Args: {
+          _branch_id: string
+          _customer_id?: string
+          _customer_name?: string
+          _customer_phone?: string
+          _discount_amount?: number
+          _discount_reason?: string
+          _items: Json
+          _notes?: string
+          _on_partner_tab?: boolean
+          _order_type?: Database["public"]["Enums"]["order_type"]
+          _partner_id?: string
+          _payments: Json
+          _table_number?: string
+          _voucher_code?: string
+        }
+        Returns: {
+          out_id: string
+          out_number: string
+        }[]
+      }
       create_purchase: {
         Args: {
           _branch_id: string
@@ -6998,6 +7023,10 @@ export type Database = {
         Returns: boolean
       }
       set_offers_enabled: { Args: { _enabled: boolean }; Returns: boolean }
+      set_order_table: {
+        Args: { _order_id: string; _table_number: string }
+        Returns: undefined
+      }
       set_partner_dividends_paused: {
         Args: { _partner_id: string; _paused: boolean }
         Returns: undefined
