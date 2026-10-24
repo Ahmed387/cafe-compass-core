@@ -285,8 +285,8 @@ export function PaymentBreakdown({
             label={TENDER_LABELS[key][lang]}
             value={money(tenders[key] ?? 0)}
             hint={`${counts[key] ?? 0} ${ar ? "عملية" : "txns"}`}
-            formula={ar ? "مجموع عمليات الدفع المسجلة بهذه الطريقة." : "Sum of recorded payments using this method."}
-            source={ar ? "المصدر: مدفوعات الفواتير." : "Source: invoice payments."}
+            formula={ar ? "اللي اتدفع بالطريقة دي − اللي رجع للعميل بيها (صنف اتشال، أوردر اتلغى، أو مرتجع). حساب الشريك = اللي متسجل على الشريك. مجموع الكروت = صافي الإيراد." : "Paid with this method − money handed back with it (removed item, cancelled order or refund). Partner tab = what is charged to the partner. The cards add up to net revenue."}
+            source={ar ? "المصدر: مدفوعات الفواتير ومرتجعاتها وحسابات الشركاء." : "Source: invoice payments, refunds and partner tabs."}
             details={byShift.length ? <KpiDetailRows rows={byShift.filter((row) => row.tenders[key] || row.tenderCounts[key]).map((row) => ({ label: new Date(row.openedAt).toLocaleDateString(ar ? "ar-EG" : "en-GB"), value: money(row.tenders[key]), hint: `${row.tenderCounts[key]} ${ar ? "عملية" : "txns"}` }))} empty={ar ? "لا توجد عمليات بهذه الطريقة." : "No payments by this method."} /> : undefined}
           />
         ))}
