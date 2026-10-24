@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Ban, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { toast } from "sonner";
 
 import { NoPermission, PageHeader } from "@/components/layout/AppShell";
 import { OrderCancelDialog } from "@/components/orders/OrderCancelDialog";
@@ -24,7 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
-import { invoiceSequence } from "@/lib/receipt";
+import { invoiceSequence, printReceipt } from "@/lib/receipt";
 import { tenderLabel } from "@/lib/tender";
 
 export const Route = createFileRoute("/_authenticated/orders/$orderId")({
@@ -130,6 +131,45 @@ function OrderInvoicePage() {
     !shiftClosed &&
     (can("pos.cancel_order") || can("pos.create_order"));
 
+  // Prints the same 80mm receipt as the POS. window.print() printed a blank
+  // page: the global print CSS only shows the shift close sheet.
+  const print = () => {
+    const ok = printReceipt({
+      companyName: me?.company?.name ?? t("app.name"),
+      branchName: me?.branches.find((b) => b.id === row.branch_id)?.name ?? null,
+      orderNumber: row.order_number,
+      createdAt: row.created_at,
+      orderType:
+        ({ dine_in: "Dine-in", takeaway: "Takeaway", delivery: "Delivery" } as Record<string, string>)[
+          row.order_type
+        ] ?? row.order_type,
+      tableNumber: row.order_type === "dine_in" ? row.table_number : null,
+      cashier: cashierName === "—" ? null : cashierName,
+      notes: row.notes ?? null,
+      lines: (row.order_items ?? []).map((item) => ({
+        product_name: item.product_name,
+        size_name: item.size_name,
+        unit_price: item.unit_price,
+        quantity: item.quantity,
+        line_total: item.line_total,
+        status: item.status,
+        modifiers: item.order_item_modifiers ?? [],
+        notes: item.notes,
+      })),
+      subtotal: row.subtotal,
+      discount: row.discount_amount,
+      total: row.total,
+      refunded,
+      payments: (row.order_payments ?? []).map((p) => ({ method_key: p.method_key, amount: p.amount })),
+      customerName: row.customer_name,
+      customerPhone: row.customer_phone,
+      currency,
+      lang,
+      labels: {},
+    });
+    if (!ok) toast.error(t("orders.printBlocked"));
+  };
+
   const statusLabel =
     row.status === "cancelled"
       ? t("orders.statusCancelled")
@@ -154,7 +194,7 @@ function OrderInvoicePage() {
             {t("orders.backToOrders")}
           </Button>
         </Link>
-        <Button size="sm" onClick={() => window.print()}>
+        <Button size="sm" onClick={print}>
           {t("orders.print")}
         </Button>
         {canReturn && (
