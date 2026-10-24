@@ -21,6 +21,8 @@ import { formatMoney, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { EmployeeDrawer, JOB_TITLES, type HrRow } from "@/components/hr/EmployeeDrawer";
 import { PaySalaryDialog, type IssuedSalary } from "@/components/hr/PaySalaryDialog";
+import { SalaryPnlMonthDialog, type SalaryLineForMonth } from "@/components/hr/SalaryPnlMonthDialog";
+import { monthLabel, profitMonthOf } from "@/core/finance/salary-month";
 import { matches, SmartFilterBar } from "@/modules/shell/SmartFilterBar";
 import { KpiCard, KpiGrid } from "@/components/shared/KpiCard";
 import { addDays, businessDayStartIso, businessMonth, monthBounds } from "@/core/finance/business-dates";
@@ -142,6 +144,7 @@ function HrPage() {
   const refresh = () => qc.invalidateQueries({ queryKey: ["hr-preview"] });
 
   const [paying, setPaying] = useState<Row | null>(null);
+  const [movingMonth, setMovingMonth] = useState<SalaryLineForMonth | null>(null);
 
   // Salary lines already issued for this month (paid or not), to tell "paid" from "issued, unpaid".
   const issued = useQuery({
@@ -151,7 +154,7 @@ function HrPage() {
       const { data, error } = await supabase
         .from("salary_payments")
         .select(
-          "id, user_id, period_start, period_end, base_amount, bonus, absence_deduction, penalty_deduction, advance_deduction, net_amount, paid_at" as "id",
+          "id, user_id, period_start, period_end, base_amount, bonus, absence_deduction, penalty_deduction, advance_deduction, net_amount, paid_at, pnl_month" as "id",
         )
         .eq("status", "active")
         .eq("salary_kind", "regular")
@@ -262,6 +265,27 @@ function HrPage() {
                           {ar ? "مكرر" : "Duplicate"}
                         </Badge>
                       )}
+                      {issuedFor(r.user_id).map((line) => {
+                        const pm = profitMonthOf(line.period_start, line.pnl_month);
+                        const moved = Boolean(line.pnl_month) && pm !== line.period_start.slice(0, 7);
+                        return manage ? (
+                          <Button
+                            key={line.id}
+                            size="sm"
+                            variant="outline"
+                            className={moved ? "h-7 border-primary/50 px-2 text-xs text-primary" : "h-7 px-2 text-xs"}
+                            title={ar ? "المرتب ده يتحسب على أرباح أنهي شهر" : "Which month's profit this salary counts in"}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMovingMonth({ id: line.id, name: r.employee_name, period_start: line.period_start, pnl_month: line.pnl_month ?? null });
+                            }}
+                          >
+                            {ar ? `أرباح ${monthLabel(pm, lang)}` : `Profit: ${monthLabel(pm, lang)}`}
+                          </Button>
+                        ) : moved ? (
+                          <Badge key={line.id} variant="outline">{ar ? `أرباح ${monthLabel(pm, lang)}` : `Profit: ${monthLabel(pm, lang)}`}</Badge>
+                        ) : null;
+                      })}
                       {isPaid(r.user_id) ? (
                         <Badge variant="secondary">{ar ? "اتصرف" : "Paid"}</Badge>
                       ) : (
@@ -292,6 +316,7 @@ function HrPage() {
           : "Click an employee to edit or add a bonus/penalty; press Pay to pay their salary on the date you choose — advances and penalties are deducted automatically. Anything above this month's pay is deducted next month."}
       </p>
 
+      <SalaryPnlMonthDialog line={movingMonth} currency={currency} lang={lang === "ar" ? "ar" : "en"} onClose={() => setMovingMonth(null)} />
       <PaySalaryDialog row={paying} issued={paying ? unpaidLine(paying.user_id) : null} start={start} end={end} currency={currency} onClose={() => setPaying(null)} />
       <EmployeeDrawer row={selected ? rows.find((x) => x.user_id === selected.user_id) ?? selected : null} onClose={() => setSelected(null)} editable={superAdmin.data === true} canBonus={manage} currency={currency} periodEnd={end} />
     </div>

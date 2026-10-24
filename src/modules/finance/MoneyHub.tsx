@@ -3,6 +3,7 @@ import { TreasuryPage } from "@/modules/finance/TreasuryPage";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/lib/i18n";
 import { FinanceKpiStrip } from "@/modules/finance/FinanceKpiStrip";
+import { PartnerTabsDueCard } from "@/modules/finance/PartnerTabsDueCard";
 
 /**
  * Sensitive financials: master safe ledger and profit & payouts (payroll lives on the HR page).
@@ -14,6 +15,7 @@ export function MoneyHub() {
   return (
     <>
     <FinanceKpiStrip />
+    <PartnerTabsDueCard />
     <Tabs defaultValue="treasury" className="animate-fade-in">
       <TabsList>
         <TabsTrigger value="treasury">{t("money.tab.treasury")}</TabsTrigger>

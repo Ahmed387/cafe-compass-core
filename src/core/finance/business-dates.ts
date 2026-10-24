@@ -75,3 +75,36 @@ export function businessDayStartIso(day: string, tz = BUSINESS_TZ): string {
 export function rangeLabel(from: string, to: string, lang: "en" | "ar" = "en"): string {
   return from === to ? formatDate(from, lang) : `${formatDate(from, lang)} – ${formatDate(to, lang)}`;
 }
+
+/** Clock time (e.g. "9:59 AM") of an instant in the café's time zone. */
+export function businessTime(at: string | Date, lang: "en" | "ar" = "en", tz = BUSINESS_TZ): string {
+  const date = typeof at === "string" ? new Date(at) : at;
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat(lang === "ar" ? "ar-EG" : "en-GB", {
+    timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true,
+  }).format(date);
+}
+
+/**
+ * How a shift's close shows on screens and exports: the shift's own day (the
+ * day it opened, where all its money counts) plus the close time. The real
+ * close instant stays in `actual` for audit.
+ */
+export function shiftCloseLabel(
+  businessDate: string | null | undefined,
+  closedAt: string | null | undefined,
+  lang: "en" | "ar" = "en",
+  tz = BUSINESS_TZ,
+): { label: string; actual: string; nextDay: boolean } {
+  if (!closedAt) return { label: "—", actual: "—", nextDay: false };
+  const closeDay = businessDay(new Date(closedAt), tz);
+  const day = businessDate || closeDay;
+  const time = businessTime(closedAt, lang, tz);
+  const label = lang === "ar"
+    ? `يوم الوردية ${formatDate(day, lang)} · اتقفلت ${time}`
+    : `Shift day ${formatDate(day, lang)} · closed ${time}`;
+  const actualDate = new Intl.DateTimeFormat(lang === "ar" ? "ar-EG" : "en-GB", {
+    timeZone: tz, dateStyle: "medium", timeStyle: "short",
+  }).format(new Date(closedAt));
+  return { label, actual: actualDate, nextDay: closeDay !== day };
+}

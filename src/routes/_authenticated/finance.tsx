@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { FinanceKpiStrip } from "@/modules/finance/FinanceKpiStrip";
 import { ManagerSalaryPanel } from "@/modules/finance/ManagerSalaryPanel";
+import { PartnerTabsDueCard } from "@/modules/finance/PartnerTabsDueCard";
 import { HubLanding } from "@/modules/shell/HubLanding";
 
 export const Route = createFileRoute("/_authenticated/finance")({
@@ -24,6 +25,7 @@ function FinancehubLanding() {
       <div className="mx-auto max-w-6xl px-4 pt-4">
         <FinanceKpiStrip />
         <ManagerSalaryPanel />
+        <PartnerTabsDueCard />
       </div>
       <HubLanding hubId="finance" />
     </>

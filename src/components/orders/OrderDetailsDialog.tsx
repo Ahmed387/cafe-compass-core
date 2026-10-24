@@ -97,7 +97,7 @@ export function OrderDetailsDialog({
       if (!order) return [];
       const { data, error } = await supabase
         .from("order_refunds")
-        .select("id, kind, amount, wallet_amount, reason, method_key, created_at, origin, items_payload")
+        .select("id, kind, amount, wallet_amount, reason, method_key, created_at, origin, is_cancellation, items_payload")
         .eq("order_id", order.id)
         .eq("status", "active")
         .order("created_at", { ascending: false });
@@ -364,7 +364,9 @@ export function OrderDetailsDialog({
                         </span>
                         <span className="flex items-center gap-2 font-mono font-semibold">
                         <Badge variant="outline">
-                          {r.origin === "void" || r.kind === "void"
+                          {r.is_cancellation
+                            ? lang === "ar" ? "إلغاء (مش مرتجع)" : "Cancelled (not a refund)"
+                            : r.origin === "void" || r.kind === "void"
                             ? t("orders.void")
                             : r.kind === "full"
                               ? t("orders.refundFull")

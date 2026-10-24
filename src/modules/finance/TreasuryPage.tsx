@@ -112,6 +112,7 @@ const CATEGORY_LABELS: Record<string, { en: string; ar: string }> = {
   expense: { en: "Expense", ar: "مصروف" },
   salary: { en: "Salary", ar: "راتب" },
   partner_withdrawal: { en: "Partner withdrawal", ar: "سحب شريك" },
+  partner_tab_settlement: { en: "Partner tab payment", ar: "سداد حساب شريك" },
   capital_contribution: { en: "Capital", ar: "رأس مال" },
   transfer_in: { en: "Transfer in", ar: "تحويل داخل" },
   transfer_out: { en: "Transfer out", ar: "تحويل خارج" },

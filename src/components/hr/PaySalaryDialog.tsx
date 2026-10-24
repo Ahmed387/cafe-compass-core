@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatMoney, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { cafeToday } from "@/lib/pay-date";
+import { monthFirstDay, monthLabel, profitMonthOf, profitMonthOptions } from "@/core/finance/salary-month";
 
 const METHODS = [
   { key: "cash", ar: "كاش من الخزنة", en: "Cash (drawer safe)" },
@@ -45,6 +46,7 @@ export type IssuedSalary = {
   advance_deduction: number | null;
   net_amount: number;
   paid_at: string | null;
+  pnl_month?: string | null;
 };
 
 export function PaySalaryDialog({
@@ -68,12 +70,14 @@ export function PaySalaryDialog({
   const qc = useQueryClient();
   const [payDate, setPayDate] = useState(todayIso);
   const [method, setMethod] = useState<(typeof METHODS)[number]["key"]>("cash");
+  // "" = the salary's own month (the default); any other month moves its profit cost there.
+  const [pnlMonth, setPnlMonth] = useState("");
   const money = (v: number | string) => formatMoney(Number(v), currency, lang);
 
   const pay = useMutation({
     mutationFn: async () => {
       if (!row) return;
-      const { error } = await supabase.rpc(
+      const { data: salaryId, error } = await supabase.rpc(
         "pay_employee_salary" as never,
         {
           _user_id: row.user_id,
@@ -84,11 +88,30 @@ export function PaySalaryDialog({
         } as never,
       );
       if (error) throw error;
+      if (pnlMonth && salaryId) {
+        const { error: monthError } = await supabase.rpc(
+          "set_salary_pnl_month" as never,
+          { _salary_id: salaryId, _month: monthFirstDay(pnlMonth), _note: null } as never,
+        );
+        // The salary is paid either way; say so plainly if the month could not be moved.
+        if (monthError) return { monthError };
+      }
+      return { monthError: null };
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       toast.success(
         ar ? "تم صرف المرتب وخصم السلف والجزاءات" : "Salary paid; advances and penalties deducted",
       );
+      if (res?.monthError) {
+        toast.error(
+          ar
+            ? `المرتب اتصرف بس فضل محسوب على شهره: ${friendlyError(res.monthError, lang)}`
+            : `Salary paid but kept in its own month: ${friendlyError(res.monthError, lang)}`,
+        );
+      }
+      setPnlMonth("");
+      qc.invalidateQueries({ queryKey: ["range-pnl"] });
+      qc.invalidateQueries({ queryKey: ["payout-preview"] });
       qc.invalidateQueries({ queryKey: ["hr-preview"] });
       qc.invalidateQueries({ queryKey: ["salary-payments"] });
       qc.invalidateQueries({ queryKey: ["treasury"] });
@@ -125,6 +148,7 @@ export function PaySalaryDialog({
       ];
   const fromDay = issued?.period_start ?? start;
   const toDay = issued?.period_end ?? end;
+  const ownMonth = profitMonthOf(fromDay, issued?.pnl_month ?? null);
 
   return (
     <Dialog open={Boolean(row)} onOpenChange={(open) => !open && onClose()}>
@@ -190,6 +214,32 @@ export function PaySalaryDialog({
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="pay-pnl-month">{ar ? "يتحسب على أرباح شهر" : "Counts in profit of"}</Label>
+          <select
+            id="pay-pnl-month"
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+            value={pnlMonth || ownMonth}
+            onChange={(e) => setPnlMonth(e.target.value === ownMonth ? "" : e.target.value)}
+          >
+            {profitMonthOptions(fromDay).map((m) => (
+              <option key={m} value={m}>
+                {monthLabel(m, lang)}
+                {m === ownMonth ? (ar ? " (شهر المرتب)" : " (salary month)") : ""}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            {pnlMonth
+              ? ar
+                ? `تكلفة المرتب هتتخصم من صافي ربح ${monthLabel(pnlMonth, lang)} بدل ${monthLabel(ownMonth, lang)}. تاريخ الصرف والخزنة زي ما هم.`
+                : `Its cost comes off ${monthLabel(pnlMonth, lang)} net profit instead of ${monthLabel(ownMonth, lang)}. Pay date and treasury stay the same.`
+              : ar
+                ? "تاريخ الصرف بيحدد يوم خروج الفلوس من الخزنة بس. تكلفة المرتب بتتحسب على أرباح الشهر اللي تختاره هنا."
+                : "The pay date only sets when money leaves the treasury. The salary cost counts in the month picked here."}
+          </p>
         </div>
 
         <DialogFooter>
