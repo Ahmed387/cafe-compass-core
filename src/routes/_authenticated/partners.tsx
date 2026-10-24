@@ -52,6 +52,7 @@ import { formatDate, formatMoney, formatPercent, friendlyError } from "@/lib/for
 import { useI18n } from "@/lib/i18n";
 import { CollapsibleSection, KpiCard, KpiGrid } from "@/components/shared/KpiCard";
 import { useUnpaidProfit } from "@/modules/finance/finance-queries";
+import { PayoutMonths } from "@/modules/finance/PayoutMonths";
 import {
   AlertTriangle,
   CirclePlus,
@@ -295,6 +296,24 @@ function PartnersPage() {
           formula={lang === "ar" ? "صافي ربح كل الأيام اللي لسه متوزعتش من أول يوم شغل لحد النهارده (الشهور اللي اتوزعت مش داخلة) — من نفس قائمة الدخل." : "Net profit of every day not yet paid out, from the first business day to today (paid months excluded) — from the same P&L."}
         />
       </KpiGrid>
+      {(can("reports.profit") || can("partners.view_profit")) && (
+        <CollapsibleSection
+          icon={<PieChart className="size-4" />}
+          title={lang === "ar" ? "الأرباح اتوزعت ولا لسه" : "Profit paid out or not"}
+          description={lang === "ar" ? "كل شهر من أول يوم شغل" : "Every month since the first business day"}
+        >
+          <PayoutMonths
+            months={unpaid.plan.months}
+            figures={unpaid.history.data?.months ?? []}
+            payouts={unpaid.history.data?.payouts ?? []}
+            loading={unpaid.history.isLoading}
+            canPay={false}
+            money={(v) => formatMoney(Number(v ?? 0), currency, lang)}
+            lang={lang}
+            payHint={lang === "ar" ? "التوزيع نفسه من الأموال ← تبويب الربح ← «وزّع أرباح»، وبيبدأ من أول شهر لسه متوزعش." : "Payouts are run from Money → Profit → «Run a payout», starting at the earliest unpaid month."}
+          />
+        </CollapsibleSection>
+      )}
       {false && (
         <div className="mb-4 grid gap-3 sm:grid-cols-2">
           <div className="rounded-lg border border-border bg-card p-3">
@@ -334,6 +353,8 @@ function PartnersPage() {
           lang={lang}
           isSuper={isSuper}
           openNetProfit={distributable.data}
+          months={unpaid.plan.months}
+          payouts={unpaid.history.data?.payouts ?? []}
         />
       </CollapsibleSection>
 

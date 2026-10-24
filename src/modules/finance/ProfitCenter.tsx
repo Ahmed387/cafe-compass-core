@@ -18,16 +18,15 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { businessToday, rangeLabel } from "@/core/finance/business-dates";
-import { nextPayoutRange, type MonthPayout } from "@/core/finance/payout-months";
-import { monthLabel } from "@/core/finance/salary-month";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { formatDate, formatMoney, formatPercent, friendlyError } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
-  payoutPlan, usePayoutHistory, useRangePnl, useSustainability, type PayoutMonthFigures, type PayoutRecord, type RangePnl,
+  payoutPlan, usePayoutHistory, useRangePnl, useSustainability, type PayoutRecord, type RangePnl,
 } from "@/modules/finance/finance-queries";
+import { PayoutMonths } from "@/modules/finance/PayoutMonths";
 import { PayoutWizard } from "@/modules/finance/PayoutWizard";
 import { SectionTitle } from "@/components/shared/SectionTitle";
 
@@ -386,95 +385,6 @@ function SustainabilityCard({
         </div>
       </div>
     </section>
-  );
-}
-
-function PayoutMonths({
-  months, figures, payouts, loading, canPay, onPay, money, lang,
-}: {
-  months: MonthPayout[];
-  figures: PayoutMonthFigures[];
-  payouts: PayoutRecord[];
-  loading: boolean;
-  canPay: boolean;
-  onPay: (range: { from: string; to: string }) => void;
-  money: (v: number | null | undefined) => string;
-  lang: Lang;
-}) {
-  const ar = lang === "ar";
-  if (loading) return <Skeleton className="mb-4 h-20 w-full" />;
-  if (!months.length) return null;
-  const active = payouts.filter((x) => x.status === "active" && x.from && x.to);
-  const label = (m: string) => monthLabel(m, lang);
-  return (
-    <div className="mb-4">
-      <div className="mb-2 flex items-center gap-1.5">
-        <p className="text-sm font-semibold">{ar ? "الشهور والتوزيع" : "Months and payouts"}</p>
-        <InfoTip>
-          {ar
-            ? "كل شهر من أول يوم شغل: اتوزع ولا لأ. تقدر توزع أي شهر لوحده، وزرار «وزّع أرباح» بيبدأ دايماً من أول شهر لسه متوزعش."
-            : "Every month since the first business day, paid out or not. Any month can be paid on its own; «Run a payout» always starts at the earliest unpaid month."}
-        </InfoTip>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {months.map((m) => {
-          const fig = figures.find((f) => f.month === m.month);
-          const paidBy = active.filter((x) => x.from! <= m.end && x.to! >= m.start);
-          const tone =
-            m.status === "paid"
-              ? "border-success/40 bg-success/5"
-              : m.status === "partial"
-                ? "border-amber-400/60 bg-amber-500/5"
-                : "border-border bg-card";
-          return (
-            <div key={m.month} className={cn("rounded-xl border p-3", tone)}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold">{label(m.month)}</p>
-                <Badge variant={m.status === "paid" ? "secondary" : "outline"}>
-                  {m.status === "paid"
-                    ? ar ? "اتوزع" : "Paid out"
-                    : m.status === "partial"
-                      ? ar ? `اتوزع ${m.paidDays} من ${m.days} يوم` : `${m.paidDays}/${m.days} days paid`
-                      : ar ? "متوزعش" : "Not paid out"}
-                </Badge>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {m.start} → {m.end}
-                {m.current && (ar ? " (الشهر ماخلصش)" : " (month running)")}
-              </p>
-              <p className={cn("mt-2 font-display text-lg font-bold tabular-nums", Number(fig?.net_profit ?? 0) < 0 && "text-destructive")}>
-                {fig ? money(fig.net_profit) : "—"}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                {ar ? "صافي ربح الشهر" : "Month net profit"}
-                {fig && Number(fig.payroll) === 0 && Number(fig.revenue) > 0 && (ar ? " · من غير رواتب" : " · no salaries recorded")}
-              </p>
-              {paidBy.length > 0 && (
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  {ar ? "اتوزع يوم" : "Paid on"}{" "}
-                  {paidBy.map((x) => (x.distributed_at ?? "").slice(0, 10)).join("، ")}
-                  {" · "}
-                  {ar ? "للشركاء" : "to partners"} {money(paidBy.reduce((s, x) => s + Number(x.partner_pool ?? 0), 0))}
-                </p>
-              )}
-              {canPay && m.firstUnpaid && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="mt-2 w-full"
-                  onClick={() => {
-                    const r = nextPayoutRange([m], businessToday(), payouts);
-                    if (r) onPay(r);
-                  }}
-                >
-                  {ar ? `وزّع ${label(m.month)}` : `Pay out ${label(m.month)}`}
-                </Button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
   );
 }
 
