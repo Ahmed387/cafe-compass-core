@@ -27,6 +27,7 @@ import { formatDateTime, formatMoney } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { invoiceSequence, printReceipt } from "@/lib/receipt";
 import { tenderLabel } from "@/lib/tender";
+import { tabSettledHow, type TabSettlementRow } from "@/core/finance/partner-tabs";
 
 export const Route = createFileRoute("/_authenticated/orders/$orderId")({
   head: () => ({
@@ -67,7 +68,7 @@ function OrderInvoicePage() {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, order_number, order_type, table_number, status, subtotal, discount_amount, discount_reason, tax_amount, total, created_at, completed_at, customer_id, customer_name, customer_phone, notes, shift_id, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name, price_delta)), order_payments(method_key, amount, reference), order_refunds(id, amount, wallet_amount, reason, method_key, created_at, status, origin, is_cancellation, items_payload), partner_tab_orders(id, total_amount, is_settled, partners(name))",
+          "id, order_number, order_type, table_number, status, subtotal, discount_amount, discount_reason, tax_amount, total, created_at, completed_at, customer_id, customer_name, customer_phone, notes, shift_id, branch_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name, price_delta)), order_payments(method_key, amount, reference), order_refunds(id, amount, wallet_amount, reason, method_key, created_at, status, origin, is_cancellation, items_payload), partner_tab_orders(id, total_amount, is_settled, partners(name), partner_tab_settlements(mode, method_key, settled_on, status))",
         )
         .eq("id", orderId)
         .maybeSingle();
@@ -120,9 +121,15 @@ function OrderInvoicePage() {
   const refunds = (row.order_refunds ?? []).filter((refund) => refund.status === "active");
   const refunded = saleRefundTotal(refunds);
   const net = netInvoiceTotal(row, refunds);
-  type TabRow = { total_amount: number; is_settled: boolean; partners: { name: string } | null };
+  type TabRow = {
+    total_amount: number;
+    is_settled: boolean;
+    partners: { name: string } | null;
+    partner_tab_settlements: TabSettlementRow[] | null;
+  };
   const tabRel = row.partner_tab_orders as unknown as TabRow | TabRow[] | null;
   const tab = Array.isArray(tabRel) ? tabRel[0] : tabRel;
+  const tabSettled = tab?.is_settled ? tabSettledHow(tab.partner_tab_settlements, lang) : null;
   const paid = (row.order_payments ?? []).length > 0;
   const canReturn = canRefund && (row.status === "completed" || row.status === "partially_refunded") && paid && net > 0;
   // Server rule cancel_pos_order: only unpaid orders (pending / open, or an unsettled partner-tab invoice).
@@ -260,6 +267,17 @@ function OrderInvoicePage() {
               <Badge className="border border-amber-400/60 bg-gradient-to-r from-amber-400/20 to-yellow-500/20 px-2.5 py-1 font-bold text-amber-900 shadow-sm dark:text-amber-300">
                 {t("orders.partnerTab")}
                 {tab.partners?.name ? ` · ${tab.partners.name}` : ""}
+              </Badge>
+            )}
+            {tab?.is_settled && (
+              <Badge
+                variant="outline"
+                className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+              >
+                {t("orders.partnerTab")}
+                {tab.partners?.name ? ` · ${tab.partners.name}` : ""} ·{" "}
+                {tabSettled?.label ?? t("ptab.settledFlag")}
+                {tabSettled?.on ? ` · ${tabSettled.on}` : ""}
               </Badge>
             )}
           </p>

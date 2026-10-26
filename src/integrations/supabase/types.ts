@@ -6956,6 +6956,10 @@ export type Database = {
         Args: { _s: Database["public"]["Tables"]["salary_payments"]["Row"] }
         Returns: number
       }
+      product_sales_breakdown: {
+        Args: { _branch_id?: string; _from: string; _to: string }
+        Returns: Json
+      }
       sales_period_summary: {
         Args: { _branch_id?: string; _from: string; _to: string }
         Returns: Json

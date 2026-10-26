@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { isCancellation, splitRefundStats } from "../../src/core/finance/cancellations.ts";
-import { settlementPreview } from "../../src/core/finance/partner-tabs.ts";
+import { settlementPreview, tabSettledHow } from "../../src/core/finance/partner-tabs.ts";
 import {
   monthFirstDay,
   monthLabel,
@@ -233,4 +233,20 @@ test("split payments, reversed refunds and points", () => {
     ],
   });
   assert.deepEqual(net, { cash: 50, instapay: 60 });
+});
+
+test("a settled partner invoice says how it was paid, ignoring reversed settlements", () => {
+  assert.deepEqual(
+    tabSettledHow(
+      [
+        { mode: "payment", method_key: "cash", settled_on: "2026-10-26", status: "active" },
+        { mode: "deduct", method_key: null, settled_on: "2026-10-20", status: "active" },
+        { mode: "payment", method_key: "instapay", settled_on: "2026-10-27", status: "reversed" },
+      ],
+      "ar",
+    ),
+    { label: "اتسدد كاش + اتخصم من رصيده", on: "2026-10-26" },
+  );
+  assert.equal(tabSettledHow([{ mode: "payout", settled_on: "2026-10-31" }], "ar")?.label, "اتخصم من الأرباح");
+  assert.equal(tabSettledHow([], "ar"), null);
 });

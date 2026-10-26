@@ -4,6 +4,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Download, FileSpreadsheet, Loader2 } from "lucide-react";
 import { exportOrdersCsv } from "@/modules/operations/orders-csv";
+import { tabSettledHow, type TabSettlementRow } from "@/core/finance/partner-tabs";
 import { toast } from "sonner";
 
 import { EmptyState, NoPermission, PageHeader } from "@/components/layout/AppShell";
@@ -159,7 +160,7 @@ function OrdersPage() {
     let query = supabase
       .from("orders")
       .select(
-        "id, order_number, order_type, table_number, status, subtotal, discount_amount, tax_amount, total, created_at, cancel_reason, customer_id, customer_name, customer_phone, notes, shift_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name)), order_payments(method_key, amount), order_refunds(amount, method_key, status, origin), partner_tab_orders(id, total_amount, is_settled)",
+        "id, order_number, order_type, table_number, status, subtotal, discount_amount, tax_amount, total, created_at, cancel_reason, customer_id, customer_name, customer_phone, notes, shift_id, user_profiles!orders_created_by_fkey(display_name, first_name, last_name), order_items(id, product_name, size_name, unit_price, quantity, line_total, status, void_reason, notes, order_item_modifiers(name)), order_payments(method_key, amount), order_refunds(amount, method_key, status, origin), partner_tab_orders(id, total_amount, is_settled, partner_tab_settlements(mode, method_key, settled_on, status))",
         { count: "exact" },
       )
       .eq("branch_id", branchId)
@@ -820,10 +821,12 @@ function OrdersPage() {
                       cashier?.display_name ||
                       `${cashier?.first_name ?? ""} ${cashier?.last_name ?? ""}`.trim() ||
                       "—";
-                    const tabRel = order.partner_tab_orders as unknown as
-                      { is_settled: boolean } | Array<{ is_settled: boolean }> | null;
+                    type TabRel = { is_settled: boolean; partner_tab_settlements?: TabSettlementRow[] | null };
+                    const tabRel = order.partner_tab_orders as unknown as TabRel | TabRel[] | null;
                     const tab = Array.isArray(tabRel) ? tabRel[0] : tabRel;
                     const onPartnerTab = Boolean(tab && !tab.is_settled);
+                    // Paid off later: keep showing it was a partner tab, and how it was paid.
+                    const tabPaid = tab?.is_settled ? tabSettledHow(tab.partner_tab_settlements, lang) : null;
                     // Gross = invoice total before refunds; Net = gross - active refunds.
                     const refundedAmount = saleRefundTotal(order.order_refunds);
                     const netTotal = netInvoiceTotal(order, order.order_refunds);
@@ -881,6 +884,13 @@ function OrdersPage() {
                         <TableCell className="w-32 text-center text-xs">
                           {onPartnerTab ? (
                             t("orders.partnerTab")
+                          ) : tab?.is_settled ? (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="whitespace-nowrap">{t("orders.partnerTab")}</span>
+                              <span className="whitespace-nowrap text-emerald-700 dark:text-emerald-300">
+                                {tabPaid?.label ?? t("ptab.settledFlag")}
+                              </span>
+                            </div>
                           ) : order.order_payments.length > 1 ? (
                             // Split payment: one line per method with the amount paid by it.
                             <div className="flex flex-col items-center gap-0.5">
