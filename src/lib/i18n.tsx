@@ -290,7 +290,7 @@ export const dict: Dict = {
   "rep.expensesPending": { en: "Expenses awaiting approval", ar: "مصاريف في انتظار الاعتماد" },
   "rep.stockValue": { en: "Stock value", ar: "قيمة المخزون" },
   "rep.daily": { en: "Daily sales", ar: "المبيعات اليومية" },
-  "rep.products": { en: "Top products", ar: "الأكثر مبيعاً" },
+  "rep.products": { en: "Product sales", ar: "مبيعات المنتجات" },
   "rep.methods": { en: "Payment methods", ar: "طرق الدفع" },
   "rep.cashiers": { en: "Cashiers", ar: "الكاشير" },
   "rep.stock": { en: "Stock", ar: "المخزون" },

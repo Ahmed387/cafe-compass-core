@@ -59,6 +59,7 @@ import { useAuth } from "@/lib/auth";
 import { formatDate, formatMoney } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { ExportCsvButton } from "@/components/ui/export-button";
+import { ProductSalesBreakdown } from "@/modules/finance/ProductSalesBreakdown";
 import type { CsvColumn } from "@/lib/csv";
 import { addDays, businessToday } from "@/core/finance/business-dates";
 
@@ -490,30 +491,7 @@ export function ReportsPage() {
         </TabsContent>
 
         <TabsContent value="products" className="mt-4">
-          {sales.by_product.length === 0 ? (
-            <EmptyState message={t("rep.empty")} />
-          ) : (
-            <div className="overflow-x-auto rounded-lg border border-border bg-card">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("common.name")}</TableHead>
-                    <TableHead>{t("rep.qty")}</TableHead>
-                    <TableHead className="text-end">{t("rep.revenue")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sales.by_product.map((row) => (
-                    <TableRow key={row.name}>
-                      <TableCell className="font-medium">{row.name}</TableCell>
-                      <TableCell>{row.qty}</TableCell>
-                      <TableCell className="text-end">{money(Number(row.revenue))}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+          <ProductSalesBreakdown from={from} to={to} branchId={currentBranchId} currency={currency} />
         </TabsContent>
 
         <TabsContent value="methods" className="mt-4">
