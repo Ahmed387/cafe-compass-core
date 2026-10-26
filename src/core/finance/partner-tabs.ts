@@ -31,3 +31,39 @@ export function settlementPreview(input: {
     balanceGoesNegative: ok && input.mode === "deduct" && round2(balance - amount) < 0,
   };
 }
+
+export type TabSettlementRow = {
+  mode: string;
+  method_key?: string | null;
+  settled_on?: string | null;
+  status?: string | null;
+};
+
+const TAB_METHODS: Record<string, { ar: string; en: string }> = {
+  cash: { ar: "كاش", en: "Cash" },
+  instapay: { ar: "انستاباي", en: "InstaPay" },
+  wallet: { ar: "محفظة", en: "Wallet" },
+  card: { ar: "فيزا", en: "Card" },
+};
+
+/** How an invoice on a partner's account was paid off, e.g. "اتسدد كاش". Reversed rows are ignored. */
+export function tabSettledHow(rows: TabSettlementRow[] | null | undefined, lang: "ar" | "en") {
+  const ar = lang === "ar";
+  const active = (rows ?? []).filter((r) => (r.status ?? "active") === "active");
+  if (active.length === 0) return null;
+  const parts = [
+    ...new Set(
+      active.map((r) => {
+        if (r.mode === "deduct") return ar ? "اتخصم من رصيده" : "deducted from balance";
+        if (r.mode === "payout") return ar ? "اتخصم من الأرباح" : "deducted from profit";
+        const m = TAB_METHODS[r.method_key ?? ""];
+        return ar ? `اتسدد ${m?.ar ?? r.method_key ?? ""}`.trim() : `paid ${m?.en ?? r.method_key ?? ""}`.trim();
+      }),
+    ),
+  ];
+  const last = active
+    .map((r) => r.settled_on ?? "")
+    .sort()
+    .at(-1);
+  return { label: parts.join(" + "), on: last || null };
+}

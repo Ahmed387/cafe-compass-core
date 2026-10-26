@@ -29,6 +29,7 @@ import { formatDateTime, formatMoney } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { invoiceSequence } from "@/lib/receipt";
 import { businessToday } from "@/core/finance/business-dates";
+import { tabSettledHow, type TabSettlementRow } from "@/core/finance/partner-tabs";
 import { PartnerTabsDueCard } from "@/modules/finance/PartnerTabsDueCard";
 
 export const Route = createFileRoute("/_authenticated/partner-tabs")({
@@ -61,6 +62,7 @@ type Row = {
   total_amount: number;
   settled_amount: number | null;
   is_settled: boolean;
+  partner_tab_settlements: TabSettlementRow[] | null;
   settled_at: string | null;
   created_at: string;
   partners: { id: string; name: string } | null;
@@ -87,7 +89,7 @@ function PartnerTabsPage() {
       const { data, error } = await supabase
         .from("partner_tab_orders")
         .select(
-          "id, total_amount, settled_amount, is_settled, settled_at, created_at, partners(id, name), user_profiles!partner_tab_orders_created_by_fkey(display_name), orders(id, order_number, table_number, order_items(product_name, size_name, quantity, unit_price, line_total, status))",
+          "id, total_amount, settled_amount, is_settled, settled_at, created_at, partners(id, name), user_profiles!partner_tab_orders_created_by_fkey(display_name), partner_tab_settlements(mode, method_key, settled_on, status), orders(id, order_number, table_number, order_items(product_name, size_name, quantity, unit_price, line_total, status))",
         )
         .order("created_at", { ascending: false })
         .limit(2000);
@@ -315,7 +317,7 @@ function PartnerTabsPage() {
                     </TableRow>,
                     open && (
                       <TableRow key={`${r.id}-items`} className="bg-muted/30 hover:bg-muted/30">
-                        <TableCell colSpan={8} className="p-3">
+                        <TableCell colSpan={9} className="p-3">
                           <table className="w-full text-xs">
                             <thead className="text-muted-foreground">
                               <tr>
@@ -336,11 +338,20 @@ function PartnerTabsPage() {
                               ))}
                             </tbody>
                           </table>
-                          {r.is_settled && r.settled_at && (
-                            <p className="mt-2 text-xs text-muted-foreground">
-                              {ar ? "خُصم من الأرباح في" : "Deducted from profit on"} {formatDateTime(r.settled_at, lang)}
-                            </p>
-                          )}
+                          {(() => {
+                            // Paid now, deducted from balance, or taken at a payout; reversed rows are left out.
+                            const how = tabSettledHow(r.partner_tab_settlements, lang);
+                            if (!how) return null;
+                            return (
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                {how.label}
+                                {how.on ? ` · ${how.on}` : ""}
+                                {!r.is_settled
+                                  ? ` · ${ar ? "الباقي" : "Left"} ${formatMoney(openOf(r), currency, lang)}`
+                                  : ""}
+                              </p>
+                            );
+                          })()}
                         </TableCell>
                       </TableRow>
                     ),
