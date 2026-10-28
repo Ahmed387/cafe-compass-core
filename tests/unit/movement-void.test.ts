@@ -47,6 +47,13 @@ test("sales, invoices, stocktakes and transfers are not cancelled from here", ()
   assert.equal(canVoidMovement(row({ movement_type: "transfer_out" })), false);
 });
 
+test("a stock reset row can be cancelled (puts the item back) but not edited", () => {
+  const reset = row({ movement_type: "adjustment", reference_type: "stock_reset", quantity: -95 });
+  assert.equal(canVoidMovement(reset), true);
+  assert.equal(canEditMovement(reset), false);
+  assert.equal(stockAfterVoid(0, reset.quantity), 95);
+});
+
 test("a cancelled movement can be neither edited nor cancelled again", () => {
   const voided = row({ voided_at: "2026-10-28T19:00:00Z" });
   assert.equal(canEditMovement(voided), false);
@@ -92,6 +99,7 @@ test("every cancel error from the database reads in Arabic", () => {
     "This waste was already deducted in payroll and can no longer change",
     "Choose at least one movement",
     "Cancel at most 200 movements at a time",
+    "Only the super admin can reset all stock",
   ]) {
     assert.ok(dbErrorToArabic(msg), msg);
   }

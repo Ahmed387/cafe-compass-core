@@ -6905,6 +6905,10 @@ export type Database = {
         Args: { _branch_id: string; _items: Json; _notes?: string }
         Returns: string
       }
+      reset_branch_stock: {
+        Args: { _branch_id: string; _reason: string }
+        Returns: Json
+      }
       reset_operational_data: { Args: { p_confirm: string }; Returns: Json }
       reset_test_shift: {
         Args: { _reason: string; _shift_id: string }

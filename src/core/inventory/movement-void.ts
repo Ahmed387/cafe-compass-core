@@ -11,6 +11,8 @@ export type MovementRow = {
 };
 
 const MANUAL_REFS = ["manual", "opening_balance"];
+// A full stock reset can be undone item by item, but not edited.
+const VOIDABLE_REFS = [...MANUAL_REFS, "stock_reset"];
 const VOIDABLE_TYPES = ["purchase", "adjustment", "waste"];
 
 /** Typed by hand (not from a sale, an invoice or a stocktake) and still live. */
@@ -19,7 +21,11 @@ export function canEditMovement(row: MovementRow): boolean {
 }
 
 export function canVoidMovement(row: MovementRow): boolean {
-  return canEditMovement(row) && VOIDABLE_TYPES.includes(row.movement_type);
+  return (
+    !row.voided_at &&
+    VOIDABLE_REFS.includes(row.reference_type ?? "manual") &&
+    VOIDABLE_TYPES.includes(row.movement_type)
+  );
 }
 
 /** Stock of the item once the movement is taken out (can go below zero). */

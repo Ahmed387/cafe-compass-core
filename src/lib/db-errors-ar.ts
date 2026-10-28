@@ -159,6 +159,8 @@ const DB_ERRORS_AR: Array<[string, string]> = [
     "هالك {1} اتخصم في المرتبات خلاص ومينفعش يتغير.",
   ],
   ["Choose at least one movement", "اختار حركة واحدة على الأقل."],
+  ["Only the super admin can reset all stock", "السوبر أدمن بس هو اللي يقدر يصفّر المخزون كله."],
+  ["Branch not found", "الفرع مش موجود."],
   ["Cancel at most 200 movements at a time", "تقدر تلغي 200 حركة بالكتير مرة واحدة."],
   [
     "Only manual stock movements can be cancelled",

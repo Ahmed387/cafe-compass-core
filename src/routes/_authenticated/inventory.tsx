@@ -271,7 +271,8 @@ function InventoryPage() {
         )
         .eq("branch_id", currentBranchId!)
         .is("voided_at", null);
-      if (manualOnly) query = query.in("reference_type", ["manual", "opening_balance"]);
+      if (manualOnly)
+        query = query.in("reference_type", ["manual", "opening_balance", "stock_reset"]);
       const { data, error } = await query
         .order("created_at", { ascending: false })
         .limit(manualOnly ? 500 : 100);
@@ -1009,6 +1010,11 @@ function InventoryPage() {
                         <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
                           {t(`inv.type.${row.movement_type}`)}
                         </Badge>
+                        {row.reference_type === "stock_reset" && (
+                          <Badge variant="secondary" className="ms-1 h-5 px-1.5 text-[10px]">
+                            {t("inv.stockReset")}
+                          </Badge>
+                        )}
                         {row.voided_at && (
                           <Badge variant="destructive" className="ms-1 h-5 px-1.5 text-[10px]">
                             {t("inv.voided")}

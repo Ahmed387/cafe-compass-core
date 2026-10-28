@@ -601,9 +601,10 @@ export const dict: Dict = {
     ar: "الحركة اتلغت، ورصيد الصنف بقى بالسالب.",
   },
   "inv.manualOnly": {
-    en: "Hand-typed movements only (purchase, adjustment, opening stock, waste)",
-    ar: "الحركات اليدوية بس (شراء، تسوية، رصيد افتتاحي، هالك)",
+    en: "Hand-typed movements only (purchase, adjustment, opening stock, waste, reset)",
+    ar: "الحركات اليدوية بس (شراء، تسوية، رصيد افتتاحي، هالك، تصفير)",
   },
+  "inv.stockReset": { en: "Stock reset", ar: "تصفير" },
   "inv.pickAll": { en: "Select all that can be cancelled", ar: "اختار كل اللي ينفع يتلغي" },
   "inv.pickRow": { en: "Select to cancel", ar: "اختار للإلغاء" },
   "inv.pickedCount": { en: "{n} selected", ar: "اخترت {n}" },
