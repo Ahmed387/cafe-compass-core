@@ -5130,6 +5130,9 @@ export type Database = {
           reference_id: string | null
           reference_type: string | null
           unit_cost: number
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
           waste_bearer: string | null
           waste_staff_id: string | null
         }
@@ -5150,6 +5153,9 @@ export type Database = {
           reference_id?: string | null
           reference_type?: string | null
           unit_cost?: number
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
           waste_bearer?: string | null
           waste_staff_id?: string | null
         }
@@ -5170,6 +5176,9 @@ export type Database = {
           reference_id?: string | null
           reference_type?: string | null
           unit_cost?: number
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
           waste_bearer?: string | null
           waste_staff_id?: string | null
         }
@@ -7271,6 +7280,10 @@ export type Database = {
           _staff_id?: string
         }
         Returns: string
+      }
+      void_stock_movement: {
+        Args: { _movement_id: string; _reason: string }
+        Returns: Json
       }
       waive_staff_penalty: {
         Args: { _penalty_id: string; _reason: string }

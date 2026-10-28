@@ -59,6 +59,12 @@ import { formatDateTime, formatMoney, friendlyError } from "@/lib/format";
 import { UnifiedSearchFilter } from "@/modules/shell/UnifiedSearchFilter";
 import { useI18n } from "@/lib/i18n";
 import { KpiCard, KpiGrid } from "@/components/shared/KpiCard";
+import {
+  canEditMovement,
+  canVoidMovement,
+  movementsForTab,
+  stockAfterVoid,
+} from "@/core/inventory/movement-void";
 
 export const Route = createFileRoute("/_authenticated/inventory")({
   head: () => ({
@@ -66,8 +72,7 @@ export const Route = createFileRoute("/_authenticated/inventory")({
       { title: "Inventory — 20s Coffee" },
       {
         name: "description",
-        content:
-          "Track stock per branch and record purchases, waste, adjustments and stocktakes.",
+        content: "Track stock per branch and record purchases, waste, adjustments and stocktakes.",
       },
       { property: "og:title", content: "Inventory — 20s Coffee" },
       {
@@ -77,7 +82,10 @@ export const Route = createFileRoute("/_authenticated/inventory")({
     ],
   }),
   validateSearch: (search: Record<string, unknown>) => ({
-    tab: search["tab"] === "movements" ? "movements" : "stock",
+    tab:
+      search["tab"] === "movements" || search["tab"] === "voided"
+        ? (search["tab"] as "movements" | "voided")
+        : "stock",
   }),
   component: InventoryPage,
 });
@@ -126,7 +134,14 @@ function SearchBar({
   placeholder: string;
   clearLabel: string;
 }) {
-  return <UnifiedSearchFilter search={value} onSearch={onChange} placeholder={placeholder} className="mb-0" />;
+  return (
+    <UnifiedSearchFilter
+      search={value}
+      onSearch={onChange}
+      placeholder={placeholder}
+      className="mb-0"
+    />
+  );
 }
 
 function InventoryPage() {
@@ -167,6 +182,15 @@ function InventoryPage() {
     created_at: string;
     quantity: string;
     unit_cost: string;
+    reason: string;
+  } | null>(null);
+  const [moveVoid, setMoveVoid] = useState<{
+    id: string;
+    item: string;
+    type: string;
+    created_at: string;
+    quantity: number;
+    stockAfter: number;
     reason: string;
   } | null>(null);
 
@@ -233,11 +257,30 @@ function InventoryPage() {
       const { data, error } = await supabase
         .from("stock_movements")
         .select(
-          "id, movement_type, quantity, unit_cost, balance_after, reason, reference_type, created_at, waste_bearer, waste_staff_id, inventory_items(name, name_ar, unit)",
+          "id, item_id, movement_type, quantity, unit_cost, balance_after, reason, reference_type, created_at, waste_bearer, waste_staff_id, voided_at, void_reason, inventory_items(name, name_ar, unit)",
         )
         .eq("branch_id", currentBranchId!)
+        .is("voided_at", null)
         .order("created_at", { ascending: false })
         .limit(100);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: canView && Boolean(currentBranchId),
+  });
+
+  const voidedMovements = useQuery({
+    queryKey: ["stock-movements", "voided", currentBranchId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("stock_movements")
+        .select(
+          "id, item_id, movement_type, quantity, unit_cost, balance_after, reason, reference_type, created_at, waste_bearer, waste_staff_id, voided_at, void_reason, inventory_items(name, name_ar, unit)",
+        )
+        .eq("branch_id", currentBranchId!)
+        .not("voided_at", "is", null)
+        .order("voided_at", { ascending: false })
+        .limit(200);
       if (error) throw error;
       return data ?? [];
     },
@@ -262,17 +305,19 @@ function InventoryPage() {
 
   const filteredMovements = useMemo(
     () =>
-      (movements.data ?? []).filter((row) =>
-        hit(
-          movesTerm,
-          row.inventory_items?.name,
-          row.inventory_items?.name_ar,
-          row.reason,
-          row.movement_type,
-          t(`inv.type.${row.movement_type}`),
-        ),
+      movementsForTab((tab === "voided" ? voidedMovements.data : movements.data) ?? [], tab).filter(
+        (row) =>
+          hit(
+            movesTerm,
+            row.inventory_items?.name,
+            row.inventory_items?.name_ar,
+            row.reason,
+            row.void_reason,
+            row.movement_type,
+            t(`inv.type.${row.movement_type}`),
+          ),
       ),
-    [movements.data, movesTerm, lang],
+    [movements.data, voidedMovements.data, tab, movesTerm, lang],
   );
 
   const isLow = (row: { id: string; min_qty: number | null }) =>
@@ -280,7 +325,10 @@ function InventoryPage() {
   const [lowOnly, setLowOnly] = useState(false);
   const shownItems = lowOnly ? filteredItems.filter(isLow) : filteredItems;
   const lowItems = filteredItems.filter(isLow);
-  const stockValue = shownItems.reduce((t, r) => t + (stockMap.get(r.id) ?? 0) * Number(r.cost_per_unit ?? 0), 0);
+  const stockValue = shownItems.reduce(
+    (t, r) => t + (stockMap.get(r.id) ?? 0) * Number(r.cost_per_unit ?? 0),
+    0,
+  );
 
   const linkedCount = (deleteUsage?.products.length ?? 0) + (deleteUsage?.modifiers.length ?? 0);
 
@@ -390,6 +438,28 @@ function InventoryPage() {
     onSuccess: async () => {
       toast.success(t("inv.movementUpdated"));
       setMoveEdit(null);
+      await refreshStock();
+    },
+    onError: showError,
+  });
+
+  // Cancel a manual movement: the row stays, marked cancelled; the database
+  // takes it out of the stock and recalculates the sales cost.
+  const voidMovement = useMutation({
+    mutationFn: async () => {
+      if (!moveVoid) return null;
+      if (moveVoid.reason.trim().length < 3) throw new Error(t("inv.reasonRequired"));
+      const { data, error } = await supabase.rpc("void_stock_movement", {
+        _movement_id: moveVoid.id,
+        _reason: moveVoid.reason.trim(),
+      });
+      if (error) throw error;
+      return data as { stock_after: number; negative: boolean } | null;
+    },
+    onSuccess: async (data) => {
+      if (data?.negative) toast.warning(t("inv.movementVoidedNegative"));
+      else toast.success(t("inv.movementVoided"));
+      setMoveVoid(null);
       await refreshStock();
     },
     onError: showError,
@@ -548,17 +618,86 @@ function InventoryPage() {
           <TabsList className="w-max">
             <TabsTrigger value="stock">{t("inv.stock")}</TabsTrigger>
             <TabsTrigger value="movements">{t("inv.movements")}</TabsTrigger>
+            <TabsTrigger value="voided">
+              {t("inv.voidedMovements")}
+              {(voidedMovements.data ?? []).length > 0 && (
+                <Badge variant="secondary" className="ms-1.5 h-5 px-1.5 text-[10px] tabular-nums">
+                  {(voidedMovements.data ?? []).length}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
         </div>
 
         <TabsContent value="stock" className="mt-4 space-y-3">
           <KpiGrid cols={3}>
-            <KpiCard label={lang === "ar" ? "إجمالي الأصناف" : "Total items"} value={shownItems.length} tone="brand" formula={lang === "ar" ? "عدد أصناف المخزون المطابقة للفلاتر." : "Inventory items matching the filters."} details={<div className="space-y-2">{shownItems.map((row) => <div key={row.id} className="flex justify-between gap-3 rounded-lg border border-border p-3 text-sm"><span>{lang === "ar" ? (row.name_ar ?? row.name) : row.name}</span><span className="tabular-nums">{stockMap.get(row.id) ?? 0} {row.unit}</span></div>)}</div>} />
-            <KpiCard label={lang === "ar" ? "أصناف وصلت لحد إعادة الطلب" : "At reorder level"} value={lowItems.length} tone={lowItems.length ? "bad" : "good"} formula={lang === "ar" ? "الرصيد الحالي أقل من أو يساوي حد إعادة الطلب." : "Current quantity is at or below reorder level."} details={<div className="space-y-2">{lowItems.map((row) => <div key={row.id} className="flex justify-between gap-3 rounded-lg border border-border p-3 text-sm"><span>{lang === "ar" ? (row.name_ar ?? row.name) : row.name}</span><span className="tabular-nums text-destructive">{stockMap.get(row.id) ?? 0} {row.unit}</span></div>)}</div>} />
-            <KpiCard label={lang === "ar" ? "قيمة المخزون الإجمالية" : "Total stock value"} value={formatMoney(stockValue, currency, lang)} formula={lang === "ar" ? "مجموع الرصيد الحالي × تكلفة الوحدة لكل صنف." : "Sum of current quantity × unit cost per item."} />
+            <KpiCard
+              label={lang === "ar" ? "إجمالي الأصناف" : "Total items"}
+              value={shownItems.length}
+              tone="brand"
+              formula={
+                lang === "ar"
+                  ? "عدد أصناف المخزون المطابقة للفلاتر."
+                  : "Inventory items matching the filters."
+              }
+              details={
+                <div className="space-y-2">
+                  {shownItems.map((row) => (
+                    <div
+                      key={row.id}
+                      className="flex justify-between gap-3 rounded-lg border border-border p-3 text-sm"
+                    >
+                      <span>{lang === "ar" ? (row.name_ar ?? row.name) : row.name}</span>
+                      <span className="tabular-nums">
+                        {stockMap.get(row.id) ?? 0} {row.unit}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              }
+            />
+            <KpiCard
+              label={lang === "ar" ? "أصناف وصلت لحد إعادة الطلب" : "At reorder level"}
+              value={lowItems.length}
+              tone={lowItems.length ? "bad" : "good"}
+              formula={
+                lang === "ar"
+                  ? "الرصيد الحالي أقل من أو يساوي حد إعادة الطلب."
+                  : "Current quantity is at or below reorder level."
+              }
+              details={
+                <div className="space-y-2">
+                  {lowItems.map((row) => (
+                    <div
+                      key={row.id}
+                      className="flex justify-between gap-3 rounded-lg border border-border p-3 text-sm"
+                    >
+                      <span>{lang === "ar" ? (row.name_ar ?? row.name) : row.name}</span>
+                      <span className="tabular-nums text-destructive">
+                        {stockMap.get(row.id) ?? 0} {row.unit}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              }
+            />
+            <KpiCard
+              label={lang === "ar" ? "قيمة المخزون الإجمالية" : "Total stock value"}
+              value={formatMoney(stockValue, currency, lang)}
+              formula={
+                lang === "ar"
+                  ? "مجموع الرصيد الحالي × تكلفة الوحدة لكل صنف."
+                  : "Sum of current quantity × unit cost per item."
+              }
+            />
           </KpiGrid>
           <label className="flex min-h-11 w-max cursor-pointer items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-primary" checked={lowOnly} onChange={(e) => setLowOnly(e.target.checked)} />
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={lowOnly}
+              onChange={(e) => setLowOnly(e.target.checked)}
+            />
             {lang === "ar" ? "الناقص فقط" : "Low stock only"}
           </label>
           <SearchBar
@@ -583,7 +722,9 @@ function InventoryPage() {
               <Table className="min-w-[860px] text-xs">
                 <TableHeader className="bg-muted/45">
                   <TableRow className="hover:bg-muted/45">
-                    <TableHead className="h-9 min-w-52 px-3 text-start font-semibold">{t("inv.item")}</TableHead>
+                    <TableHead className="h-9 min-w-52 px-3 text-start font-semibold">
+                      {t("inv.item")}
+                    </TableHead>
                     <TableHead className="h-9 w-20 whitespace-nowrap px-2 text-center font-semibold">
                       {t("inv.unit")}
                     </TableHead>
@@ -599,7 +740,9 @@ function InventoryPage() {
                     <TableHead className="h-9 w-28 whitespace-nowrap px-2 text-center font-semibold">
                       <span className="inline-flex items-center gap-1">
                         {lang === "ar" ? "الهالك" : "Waste"}
-                        <InfoTip title={lang === "ar" ? "ليه الهالك لكل خامة؟" : "Why waste per item?"}>
+                        <InfoTip
+                          title={lang === "ar" ? "ليه الهالك لكل خامة؟" : "Why waste per item?"}
+                        >
                           {lang === "ar"
                             ? "نسبة الهالك المتوقعة لكل خامة (افتراضيًا 0%). رقم داخلي للمتابعة وسماحية للجرد بس — مش بيزوّد تكلفة الصنف ولا سعر المنيو. الهالك الفعلي بيتسجل من زرار «تسجيل هالك» مع تحديد مين يتحمله."
                             : "Expected waste per ingredient (0% by default). An internal tracking figure and stocktake tolerance only — it never raises the item cost or menu prices. Actual waste is logged with “Log waste”, choosing who bears it."}
@@ -628,7 +771,9 @@ function InventoryPage() {
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell className="w-20 px-2 py-1.5 text-center text-muted-foreground">{row.unit}</TableCell>
+                        <TableCell className="w-20 px-2 py-1.5 text-center text-muted-foreground">
+                          {row.unit}
+                        </TableCell>
                         <TableCell className="w-32 px-2 py-1.5 text-center tabular-nums">
                           <span className={low ? "font-semibold text-destructive" : ""}>{qty}</span>
                           {low && (
@@ -644,7 +789,12 @@ function InventoryPage() {
                           {formatMoney(row.cost_per_unit, currency, lang)}
                         </TableCell>
                         <TableCell className="w-28 px-2 py-1 text-center">
-                          <WasteCell itemId={row.id} value={Number(row.waste_pct ?? 0)} editable={canAdjust} lang={lang === "ar" ? "ar" : "en"} />
+                          <WasteCell
+                            itemId={row.id}
+                            value={Number(row.waste_pct ?? 0)}
+                            editable={canAdjust}
+                            lang={lang === "ar" ? "ar" : "en"}
+                          />
                         </TableCell>
                         <TableCell className="w-32 whitespace-nowrap px-3 py-1.5 text-end font-semibold tabular-nums">
                           {formatMoney(qty * Number(row.cost_per_unit), currency, lang)}
@@ -681,7 +831,9 @@ function InventoryPage() {
                                 variant="ghost"
                                 className="size-8"
                                 title={row.is_active ? t("common.disable") : t("common.enable")}
-                                aria-label={row.is_active ? t("common.disable") : t("common.enable")}
+                                aria-label={
+                                  row.is_active ? t("common.disable") : t("common.enable")
+                                }
                                 onClick={() => toggleItem.mutate(row)}
                               >
                                 <Power className="size-3.5" />
@@ -707,15 +859,16 @@ function InventoryPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="movements" className="mt-4 space-y-3">
+        {/* One table for both tabs: live movements, or the cancelled ones only */}
+        <TabsContent value={tab === "voided" ? "voided" : "movements"} className="mt-4 space-y-3">
           <SearchBar
             value={movesQuery}
             onChange={setMovesQuery}
             placeholder={t("inv.searchMovements")}
             clearLabel={t("inv.clearSearch")}
           />
-          {(movements.data ?? []).length === 0 ? (
-            <EmptyState message={t("inv.emptyMovements")} />
+          {((tab === "voided" ? voidedMovements.data : movements.data) ?? []).length === 0 ? (
+            <EmptyState message={t(tab === "voided" ? "inv.emptyVoided" : "inv.emptyMovements")} />
           ) : filteredMovements.length === 0 ? (
             <EmptyState message={t("inv.noMatches")} />
           ) : (
@@ -726,7 +879,9 @@ function InventoryPage() {
                     <TableHead className="h-9 w-40 whitespace-nowrap px-3 text-center font-semibold">
                       {t("inv.date")}
                     </TableHead>
-                    <TableHead className="h-9 min-w-48 px-3 text-start font-semibold">{t("inv.item")}</TableHead>
+                    <TableHead className="h-9 min-w-48 px-3 text-start font-semibold">
+                      {t("inv.item")}
+                    </TableHead>
                     <TableHead className="h-9 w-32 whitespace-nowrap px-2 text-center font-semibold">
                       {t("inv.type")}
                     </TableHead>
@@ -736,9 +891,11 @@ function InventoryPage() {
                     <TableHead className="h-9 w-28 whitespace-nowrap px-2 text-center font-semibold">
                       {t("inv.balance")}
                     </TableHead>
-                    <TableHead className="h-9 min-w-52 px-3 text-start font-semibold">{t("inv.reason")}</TableHead>
+                    <TableHead className="h-9 min-w-52 px-3 text-start font-semibold">
+                      {t("inv.reason")}
+                    </TableHead>
                     {canAdjust && (
-                      <TableHead className="w-28 whitespace-nowrap text-center">
+                      <TableHead className="w-40 whitespace-nowrap text-center">
                         {t("common.actions")}
                       </TableHead>
                     )}
@@ -746,7 +903,10 @@ function InventoryPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredMovements.map((row) => (
-                    <TableRow key={row.id} className="h-11 even:bg-muted/20">
+                    <TableRow
+                      key={row.id}
+                      className={`h-11 even:bg-muted/20 ${row.voided_at ? "text-muted-foreground" : ""}`}
+                    >
                       <TableCell className="w-40 whitespace-nowrap px-3 py-1.5 text-center tabular-nums">
                         {formatDateTime(row.created_at, lang)}
                       </TableCell>
@@ -754,21 +914,35 @@ function InventoryPage() {
                         {itemName(row.inventory_items)}
                       </TableCell>
                       <TableCell className="w-32 px-2 py-1.5 text-center">
-                        <Badge variant="outline" className="h-5 px-1.5 text-[10px]">{t(`inv.type.${row.movement_type}`)}</Badge>
+                        <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                          {t(`inv.type.${row.movement_type}`)}
+                        </Badge>
+                        {row.voided_at && (
+                          <Badge variant="destructive" className="ms-1 h-5 px-1.5 text-[10px]">
+                            {t("inv.voided")}
+                          </Badge>
+                        )}
                         {row.movement_type === "waste" && (
                           <span className="mt-1 block text-[10px] text-muted-foreground">
                             {(() => {
-                              const b = WASTE_BEARERS[(row.waste_bearer ?? "business") as WasteBearer];
+                              const b =
+                                WASTE_BEARERS[(row.waste_bearer ?? "business") as WasteBearer];
                               const who = lang === "ar" ? b.ar : b.en;
-                              const name = row.waste_staff_id ? staffNames.get(row.waste_staff_id) : null;
+                              const name = row.waste_staff_id
+                                ? staffNames.get(row.waste_staff_id)
+                                : null;
                               return `${lang === "ar" ? "على" : "Borne by"}: ${name ?? who}`;
                             })()}
                           </span>
                         )}
                       </TableCell>
                       <TableCell
-                          className={`w-24 px-2 py-1.5 text-center font-semibold tabular-nums ${
-                          Number(row.quantity) < 0 ? "text-destructive" : "text-emerald-600"
+                        className={`w-24 px-2 py-1.5 text-center font-semibold tabular-nums ${
+                          row.voided_at
+                            ? "text-muted-foreground line-through"
+                            : Number(row.quantity) < 0
+                              ? "text-destructive"
+                              : "text-emerald-600"
                         }`}
                       >
                         {Number(row.quantity) > 0 ? "+" : ""}
@@ -777,31 +951,66 @@ function InventoryPage() {
                       <TableCell className="w-28 px-2 py-1.5 text-center tabular-nums">
                         {Number(row.balance_after)}
                       </TableCell>
-                      <TableCell className="max-w-72 min-w-52 truncate px-3 py-1.5 text-muted-foreground" title={row.reason ?? undefined}>
+                      <TableCell
+                        className="max-w-72 min-w-52 truncate px-3 py-1.5 text-muted-foreground"
+                        title={row.reason ?? undefined}
+                      >
                         {row.reason ?? "—"}
+                        {row.voided_at && (
+                          <span
+                            className="block truncate text-[10px] text-destructive"
+                            title={row.void_reason ?? undefined}
+                          >
+                            {t("inv.voidedOn")} {formatDateTime(row.voided_at, lang)}:{" "}
+                            {row.void_reason}
+                          </span>
+                        )}
                       </TableCell>
                       {canAdjust && (
-                        <TableCell className="w-28 text-center">
-                          {["manual", "opening_balance"].includes(
-                            row.reference_type ?? "manual",
-                          ) && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                setMoveEdit({
-                                  id: row.id,
-                                  item: itemName(row.inventory_items),
-                                  type: t(`inv.type.${row.movement_type}`),
-                                  created_at: row.created_at,
-                                  quantity: String(Math.abs(Number(row.quantity))),
-                                  unit_cost: String(row.unit_cost ?? 0),
-                                  reason: "",
-                                })
-                              }
-                            >
-                              {t("common.edit")}
-                            </Button>
+                        <TableCell className="w-40 text-center">
+                          {canEditMovement(row) && (
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  setMoveEdit({
+                                    id: row.id,
+                                    item: itemName(row.inventory_items),
+                                    type: t(`inv.type.${row.movement_type}`),
+                                    created_at: row.created_at,
+                                    quantity: String(Math.abs(Number(row.quantity))),
+                                    unit_cost: String(row.unit_cost ?? 0),
+                                    reason: "",
+                                  })
+                                }
+                              >
+                                {t("common.edit")}
+                              </Button>
+                              {canVoidMovement(row) && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() =>
+                                    setMoveVoid({
+                                      id: row.id,
+                                      item: itemName(row.inventory_items),
+                                      type: t(`inv.type.${row.movement_type}`),
+                                      created_at: row.created_at,
+                                      quantity: Number(row.quantity),
+                                      stockAfter: stockAfterVoid(
+                                        stockMap.get(row.item_id) ?? 0,
+                                        row.quantity,
+                                      ),
+                                      reason: "",
+                                    })
+                                  }
+                                >
+                                  {t("inv.voidMovement")}
+                                </Button>
+                              )}
+                            </div>
                           )}
                         </TableCell>
                       )}
@@ -1229,6 +1438,77 @@ function InventoryPage() {
               disabled={editMovement.isPending || !moveEdit?.reason.trim()}
             >
               {t("common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel a manual movement; nothing is deleted */}
+      <Dialog open={Boolean(moveVoid)} onOpenChange={(open) => !open && setMoveVoid(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("inv.voidMovement")}</DialogTitle>
+          </DialogHeader>
+          {moveVoid && (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{t("inv.item")}</span>
+                  <span className="font-medium">{moveVoid.item}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{t("inv.type")}</span>
+                  <span>{moveVoid.type}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{t("inv.date")}</span>
+                  <span className="font-mono tabular-nums">
+                    {formatDateTime(moveVoid.created_at, lang)}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{t("inv.qty")}</span>
+                  <span className="font-mono tabular-nums">
+                    {moveVoid.quantity > 0 ? "+" : ""}
+                    {moveVoid.quantity}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">{t("inv.stockAfterVoid")}</span>
+                  <span
+                    className={`font-mono font-semibold tabular-nums ${moveVoid.stockAfter < 0 ? "text-destructive" : ""}`}
+                  >
+                    {moveVoid.stockAfter}
+                  </span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">{t("inv.voidHint")}</p>
+              {moveVoid.stockAfter < 0 && (
+                <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+                  {t("inv.voidNegativeWarning")}
+                </p>
+              )}
+              <div>
+                <Label>{t("inv.voidReason")}</Label>
+                <Textarea
+                  className="mt-1 text-start"
+                  rows={3}
+                  value={moveVoid.reason}
+                  onChange={(e) => setMoveVoid({ ...moveVoid, reason: e.target.value })}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoveVoid(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => voidMovement.mutate()}
+              disabled={voidMovement.isPending || (moveVoid?.reason.trim().length ?? 0) < 3}
+            >
+              {t("inv.voidMovement")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -469,6 +469,8 @@ export const dict: Dict = {
   },
   "inv.stock": { en: "Stock", ar: "الأرصدة" },
   "inv.movements": { en: "Movements", ar: "الحركات" },
+  "inv.voidedMovements": { en: "Cancelled movements", ar: "الحركات الملغية" },
+  "inv.emptyVoided": { en: "No cancelled movements.", ar: "مفيش حركات ملغية." },
   "inv.recipes": { en: "Recipes", ar: "الوصفات" },
   "inv.modRecipes": { en: "Add-on recipes", ar: "وصفات الإضافات" },
   "inv.addon": { en: "Add-on", ar: "الإضافة" },
@@ -576,6 +578,24 @@ export const dict: Dict = {
   "inv.movementUpdated": {
     en: "Movement updated and balance recalculated.",
     ar: "تم تعديل الحركة وإعادة حساب الرصيد.",
+  },
+  "inv.voidMovement": { en: "Cancel movement", ar: "إلغاء الحركة" },
+  "inv.voided": { en: "Cancelled", ar: "ملغية" },
+  "inv.voidedOn": { en: "Cancelled", ar: "اتلغت" },
+  "inv.voidReason": { en: "Why are you cancelling it?", ar: "سبب الإلغاء" },
+  "inv.stockAfterVoid": { en: "Stock after cancelling", ar: "الرصيد بعد الإلغاء" },
+  "inv.voidHint": {
+    en: "The movement stays in the log marked cancelled. Stock goes back as if it never happened, and the sales cost is recalculated from its date (days already paid out stay as they are).",
+    ar: "الحركة هتفضل في السجل ومكتوب عليها ملغية. الرصيد هيرجع كأنها ماحصلتش، وتكلفة المبيعات هتتحسب تاني من تاريخها (الأيام اللي اتوزعت أرباحها مش هتتغير).",
+  },
+  "inv.voidNegativeWarning": {
+    en: "Warning: stock of this item will go below zero after cancelling. Part of this quantity was already used.",
+    ar: "تحذير: رصيد الصنف ده هيبقى بالسالب بعد الإلغاء، يعني جزء من الكمية دي اتصرف خلاص.",
+  },
+  "inv.movementVoided": { en: "Movement cancelled and stock updated.", ar: "الحركة اتلغت والرصيد اتظبط." },
+  "inv.movementVoidedNegative": {
+    en: "Movement cancelled. Stock of this item is now below zero.",
+    ar: "الحركة اتلغت، ورصيد الصنف بقى بالسالب.",
   },
   "inv.editItem": { en: "Edit item", ar: "تعديل الصنف" },
   "inv.newMovement": { en: "New movement", ar: "حركة جديدة" },
