@@ -34,3 +34,27 @@ export function movementsForTab<T extends Pick<MovementRow, "voided_at">>(
 ): T[] {
   return rows.filter((row) => (tab === "voided" ? Boolean(row.voided_at) : !row.voided_at));
 }
+
+/**
+ * Stock of each item once all the chosen movements are taken out. Two rows of
+ * the same item add up, so the warning is right for the batch as a whole.
+ */
+export function stockAfterVoidAll(
+  stock: ReadonlyMap<string, number>,
+  rows: Array<{ item_id: string; quantity: number | string }>,
+): Array<{ item_id: string; count: number; quantity: number; after: number }> {
+  const byItem = new Map<string, { count: number; quantity: number }>();
+  for (const row of rows) {
+    const cur = byItem.get(row.item_id) ?? { count: 0, quantity: 0 };
+    byItem.set(row.item_id, {
+      count: cur.count + 1,
+      quantity: cur.quantity + Number(row.quantity),
+    });
+  }
+  return [...byItem].map(([item_id, { count, quantity }]) => ({
+    item_id,
+    count,
+    quantity: Math.round(quantity * 1000) / 1000,
+    after: stockAfterVoid(stock.get(item_id) ?? 0, quantity),
+  }));
+}

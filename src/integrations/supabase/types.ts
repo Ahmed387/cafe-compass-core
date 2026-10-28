@@ -7285,6 +7285,10 @@ export type Database = {
         Args: { _movement_id: string; _reason: string }
         Returns: Json
       }
+      void_stock_movements: {
+        Args: { _movement_ids: string[]; _reason: string }
+        Returns: Json
+      }
       waive_staff_penalty: {
         Args: { _penalty_id: string; _reason: string }
         Returns: string
