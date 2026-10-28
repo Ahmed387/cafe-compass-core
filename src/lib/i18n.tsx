@@ -592,10 +592,39 @@ export const dict: Dict = {
     en: "Warning: stock of this item will go below zero after cancelling. Part of this quantity was already used.",
     ar: "تحذير: رصيد الصنف ده هيبقى بالسالب بعد الإلغاء، يعني جزء من الكمية دي اتصرف خلاص.",
   },
-  "inv.movementVoided": { en: "Movement cancelled and stock updated.", ar: "الحركة اتلغت والرصيد اتظبط." },
+  "inv.movementVoided": {
+    en: "Movement cancelled and stock updated.",
+    ar: "الحركة اتلغت والرصيد اتظبط.",
+  },
   "inv.movementVoidedNegative": {
     en: "Movement cancelled. Stock of this item is now below zero.",
     ar: "الحركة اتلغت، ورصيد الصنف بقى بالسالب.",
+  },
+  "inv.manualOnly": {
+    en: "Hand-typed movements only (purchase, adjustment, opening stock, waste, reset)",
+    ar: "الحركات اليدوية بس (شراء، تسوية، رصيد افتتاحي، هالك، تصفير)",
+  },
+  "inv.stockReset": { en: "Stock reset", ar: "تصفير" },
+  "inv.pickAll": { en: "Select all that can be cancelled", ar: "اختار كل اللي ينفع يتلغي" },
+  "inv.pickRow": { en: "Select to cancel", ar: "اختار للإلغاء" },
+  "inv.pickedCount": { en: "{n} selected", ar: "اخترت {n}" },
+  "inv.voidPicked": { en: "Cancel selected ({n})", ar: "إلغاء المحدد ({n})" },
+  "inv.clearPicked": { en: "Clear selection", ar: "شيل الاختيار" },
+  "inv.voidPickedHint": {
+    en: "All or nothing: if one of them cannot be cancelled, none is, and you are told which item. The movements stay in the log marked cancelled, and the sales cost is recalculated once.",
+    ar: "يا كله يتلغي يا مفيش: لو حركة فيهم مينفعش تتلغي، مفيش حاجة هتتلغي وهيقولك أنهي صنف. الحركات هتفضل في السجل ومكتوب عليها ملغية، وتكلفة المبيعات هتتحسب تاني مرة واحدة.",
+  },
+  "inv.voidPickedNegative": {
+    en: "Warning: some items (in red) will go below zero after cancelling.",
+    ar: "تحذير: فيه أصناف (باللون الأحمر) رصيدها هيبقى بالسالب بعد الإلغاء.",
+  },
+  "inv.movementsVoided": {
+    en: "{n} movements cancelled and stock updated.",
+    ar: "اتلغت {n} حركة والرصيد اتظبط.",
+  },
+  "inv.movementsVoidedNegative": {
+    en: "{n} movements cancelled. Some items are now below zero.",
+    ar: "اتلغت {n} حركة، وفيه أصناف رصيدها بقى بالسالب.",
   },
   "inv.editItem": { en: "Edit item", ar: "تعديل الصنف" },
   "inv.newMovement": { en: "New movement", ar: "حركة جديدة" },

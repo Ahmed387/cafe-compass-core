@@ -6,6 +6,7 @@ import {
   canVoidMovement,
   movementsForTab,
   stockAfterVoid,
+  stockAfterVoidAll,
 } from "../../src/core/inventory/movement-void.ts";
 import { dbErrorToArabic } from "../../src/lib/db-errors-ar.ts";
 
@@ -44,6 +45,13 @@ test("sales, invoices, stocktakes and transfers are not cancelled from here", ()
     false,
   );
   assert.equal(canVoidMovement(row({ movement_type: "transfer_out" })), false);
+});
+
+test("a stock reset row can be cancelled (puts the item back) but not edited", () => {
+  const reset = row({ movement_type: "adjustment", reference_type: "stock_reset", quantity: -95 });
+  assert.equal(canVoidMovement(reset), true);
+  assert.equal(canEditMovement(reset), false);
+  assert.equal(stockAfterVoid(0, reset.quantity), 95);
 });
 
 test("a cancelled movement can be neither edited nor cancelled again", () => {
@@ -89,7 +97,45 @@ test("every cancel error from the database reads in Arabic", () => {
     "No stock recorded for this item in this branch",
     "A reason is required",
     "This waste was already deducted in payroll and can no longer change",
+    "Choose at least one movement",
+    "Cancel at most 200 movements at a time",
+    "Only the super admin can reset all stock",
   ]) {
     assert.ok(dbErrorToArabic(msg), msg);
   }
+});
+
+test("cancelling several at once: rows of the same item add up before the warning", () => {
+  const stock = new Map([
+    ["pepsi", 80],
+    ["water", 5],
+  ]);
+  const result = stockAfterVoidAll(stock, [
+    { item_id: "pepsi", quantity: 50 },
+    { item_id: "water", quantity: 3 },
+    { item_id: "pepsi", quantity: "40" },
+    { item_id: "water", quantity: -1 },
+  ]);
+  assert.deepEqual(result, [
+    // 50 + 40 came in by mistake, but only 80 are left: the batch goes to -10.
+    { item_id: "pepsi", count: 2, quantity: 90, after: -10 },
+    // +3 out, a waste of 1 back: 5 - 3 + 1.
+    { item_id: "water", count: 2, quantity: 2, after: 3 },
+  ]);
+  assert.deepEqual(stockAfterVoidAll(stock, []), []);
+});
+
+test("batch errors name the item in Arabic", () => {
+  assert.equal(
+    dbErrorToArabic("The movement of بيبسي is already cancelled"),
+    "حركة بيبسي اتلغت قبل كده.",
+  );
+  assert.equal(
+    dbErrorToArabic("The movement of mango is not a manual one and cannot be cancelled here"),
+    "حركة mango مش يدوية، ومينفعش تتلغي من هنا.",
+  );
+  assert.equal(
+    dbErrorToArabic("The waste of لبن was already deducted in payroll and can no longer change"),
+    "هالك لبن اتخصم في المرتبات خلاص ومينفعش يتغير.",
+  );
 });

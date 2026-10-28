@@ -26,6 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -64,6 +65,7 @@ import {
   canVoidMovement,
   movementsForTab,
   stockAfterVoid,
+  stockAfterVoidAll,
 } from "@/core/inventory/movement-void";
 
 export const Route = createFileRoute("/_authenticated/inventory")({
@@ -194,6 +196,14 @@ function InventoryPage() {
     reason: string;
   } | null>(null);
 
+  // Movements ticked for cancelling together (movements tab only).
+  const [picked, setPicked] = useState<string[]>([]);
+  const [bulkVoidOpen, setBulkVoidOpen] = useState(false);
+  const [bulkVoidReason, setBulkVoidReason] = useState("");
+  // Hand-typed movements only, further back than the latest 100 (sales push them out).
+  const [manualOnly, setManualOnly] = useState(false);
+  useEffect(() => setPicked([]), [tab, currentBranchId, manualOnly]);
+
   const canView = can("inventory.view");
   const canAdjust = can("inventory.adjust");
   const canWaste = can("inventory.waste");
@@ -252,17 +262,20 @@ function InventoryPage() {
   });
 
   const movements = useQuery({
-    queryKey: ["stock-movements", currentBranchId],
+    queryKey: ["stock-movements", currentBranchId, manualOnly],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("stock_movements")
         .select(
           "id, item_id, movement_type, quantity, unit_cost, balance_after, reason, reference_type, created_at, waste_bearer, waste_staff_id, voided_at, void_reason, inventory_items(name, name_ar, unit)",
         )
         .eq("branch_id", currentBranchId!)
-        .is("voided_at", null)
+        .is("voided_at", null);
+      if (manualOnly)
+        query = query.in("reference_type", ["manual", "opening_balance", "stock_reset"]);
+      const { data, error } = await query
         .order("created_at", { ascending: false })
-        .limit(100);
+        .limit(manualOnly ? 500 : 100);
       if (error) throw error;
       return data ?? [];
     },
@@ -319,6 +332,17 @@ function InventoryPage() {
       ),
     [movements.data, voidedMovements.data, tab, movesTerm, lang],
   );
+
+  const canPick = canAdjust && tab === "movements";
+  const pickable = canPick ? filteredMovements.filter(canVoidMovement) : [];
+  const allPicked = pickable.length > 0 && pickable.every((row) => picked.includes(row.id));
+  const pickedRows = (movements.data ?? []).filter((row) => picked.includes(row.id));
+  const pickedByItem = stockAfterVoidAll(stockMap, pickedRows);
+  const pickedNames = new Map(
+    pickedRows.map((row) => [row.item_id, itemName(row.inventory_items)]),
+  );
+  const togglePick = (id: string, on: boolean) =>
+    setPicked((cur) => (on ? [...new Set([...cur, id])] : cur.filter((x) => x !== id)));
 
   const isLow = (row: { id: string; min_qty: number | null }) =>
     Number(row.min_qty ?? 0) > 0 && (stockMap.get(row.id) ?? 0) <= Number(row.min_qty ?? 0);
@@ -460,6 +484,28 @@ function InventoryPage() {
       if (data?.negative) toast.warning(t("inv.movementVoidedNegative"));
       else toast.success(t("inv.movementVoided"));
       setMoveVoid(null);
+      await refreshStock();
+    },
+    onError: showError,
+  });
+
+  const voidPicked = useMutation({
+    mutationFn: async () => {
+      if (bulkVoidReason.trim().length < 3) throw new Error(t("inv.reasonRequired"));
+      const { data, error } = await supabase.rpc("void_stock_movements", {
+        _movement_ids: picked,
+        _reason: bulkVoidReason.trim(),
+      });
+      if (error) throw error;
+      return data as { cancelled: number; negative: boolean } | null;
+    },
+    onSuccess: async (data) => {
+      const n = data?.cancelled ?? picked.length;
+      if (data?.negative) toast.warning(t("inv.movementsVoidedNegative").replace("{n}", String(n)));
+      else toast.success(t("inv.movementsVoided").replace("{n}", String(n)));
+      setBulkVoidOpen(false);
+      setBulkVoidReason("");
+      setPicked([]);
       await refreshStock();
     },
     onError: showError,
@@ -867,6 +913,30 @@ function InventoryPage() {
             placeholder={t("inv.searchMovements")}
             clearLabel={t("inv.clearSearch")}
           />
+          {tab === "movements" && (
+            <label className="flex min-h-11 w-max cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={manualOnly}
+                onChange={(e) => setManualOnly(e.target.checked)}
+              />
+              {t("inv.manualOnly")}
+            </label>
+          )}
+          {canPick && picked.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
+              <span className="font-medium">
+                {t("inv.pickedCount").replace("{n}", String(picked.length))}
+              </span>
+              <Button size="sm" variant="destructive" onClick={() => setBulkVoidOpen(true)}>
+                {t("inv.voidPicked").replace("{n}", String(picked.length))}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setPicked([])}>
+                {t("inv.clearPicked")}
+              </Button>
+            </div>
+          )}
           {((tab === "voided" ? voidedMovements.data : movements.data) ?? []).length === 0 ? (
             <EmptyState message={t(tab === "voided" ? "inv.emptyVoided" : "inv.emptyMovements")} />
           ) : filteredMovements.length === 0 ? (
@@ -876,6 +946,18 @@ function InventoryPage() {
               <Table className="min-w-[820px] text-xs">
                 <TableHeader className="bg-muted/45">
                   <TableRow className="hover:bg-muted/45">
+                    {canPick && (
+                      <TableHead className="h-9 w-10 px-2 text-center">
+                        <Checkbox
+                          checked={allPicked}
+                          disabled={pickable.length === 0}
+                          onCheckedChange={(on) =>
+                            setPicked(on ? pickable.map((row) => row.id) : [])
+                          }
+                          aria-label={t("inv.pickAll")}
+                        />
+                      </TableHead>
+                    )}
                     <TableHead className="h-9 w-40 whitespace-nowrap px-3 text-center font-semibold">
                       {t("inv.date")}
                     </TableHead>
@@ -905,8 +987,19 @@ function InventoryPage() {
                   {filteredMovements.map((row) => (
                     <TableRow
                       key={row.id}
-                      className={`h-11 even:bg-muted/20 ${row.voided_at ? "text-muted-foreground" : ""}`}
+                      className={`h-11 even:bg-muted/20 ${row.voided_at ? "text-muted-foreground" : ""} ${picked.includes(row.id) ? "bg-destructive/5" : ""}`}
                     >
+                      {canPick && (
+                        <TableCell className="w-10 px-2 text-center">
+                          {canVoidMovement(row) && (
+                            <Checkbox
+                              checked={picked.includes(row.id)}
+                              onCheckedChange={(on) => togglePick(row.id, on === true)}
+                              aria-label={t("inv.pickRow")}
+                            />
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell className="w-40 whitespace-nowrap px-3 py-1.5 text-center tabular-nums">
                         {formatDateTime(row.created_at, lang)}
                       </TableCell>
@@ -917,6 +1010,11 @@ function InventoryPage() {
                         <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
                           {t(`inv.type.${row.movement_type}`)}
                         </Badge>
+                        {row.reference_type === "stock_reset" && (
+                          <Badge variant="secondary" className="ms-1 h-5 px-1.5 text-[10px]">
+                            {t("inv.stockReset")}
+                          </Badge>
+                        )}
                         {row.voided_at && (
                           <Badge variant="destructive" className="ms-1 h-5 px-1.5 text-[10px]">
                             {t("inv.voided")}
@@ -1438,6 +1536,79 @@ function InventoryPage() {
               disabled={editMovement.isPending || !moveEdit?.reason.trim()}
             >
               {t("common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel the ticked movements together; all or nothing */}
+      <Dialog open={bulkVoidOpen} onOpenChange={setBulkVoidOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("inv.voidPicked").replace("{n}", String(picked.length))}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="max-h-64 overflow-y-auto rounded-lg border border-border">
+              <Table className="text-xs">
+                <TableHeader className="bg-muted/45">
+                  <TableRow className="hover:bg-muted/45">
+                    <TableHead className="h-8 px-3 text-start">{t("inv.item")}</TableHead>
+                    <TableHead className="h-8 w-20 text-center">{t("inv.movements")}</TableHead>
+                    <TableHead className="h-8 w-20 text-center">{t("inv.qty")}</TableHead>
+                    <TableHead className="h-8 w-28 text-center">
+                      {t("inv.stockAfterVoid")}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pickedByItem.map((g) => (
+                    <TableRow key={g.item_id}>
+                      <TableCell className="px-3 py-1.5 font-medium">
+                        {pickedNames.get(g.item_id)}
+                      </TableCell>
+                      <TableCell className="py-1.5 text-center tabular-nums">{g.count}</TableCell>
+                      <TableCell className="py-1.5 text-center font-mono tabular-nums">
+                        {g.quantity > 0 ? "+" : ""}
+                        {g.quantity}
+                      </TableCell>
+                      <TableCell
+                        className={`py-1.5 text-center font-mono font-semibold tabular-nums ${g.after < 0 ? "text-destructive" : ""}`}
+                      >
+                        {g.after}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <p className="text-xs text-muted-foreground">{t("inv.voidPickedHint")}</p>
+            {pickedByItem.some((g) => g.after < 0) && (
+              <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+                {t("inv.voidPickedNegative")}
+              </p>
+            )}
+            <div>
+              <Label>{t("inv.voidReason")}</Label>
+              <Textarea
+                className="mt-1 text-start"
+                rows={3}
+                value={bulkVoidReason}
+                onChange={(e) => setBulkVoidReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkVoidOpen(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => voidPicked.mutate()}
+              disabled={
+                voidPicked.isPending || picked.length === 0 || bulkVoidReason.trim().length < 3
+              }
+            >
+              {t("inv.voidPicked").replace("{n}", String(picked.length))}
             </Button>
           </DialogFooter>
         </DialogContent>
